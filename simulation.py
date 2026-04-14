@@ -7,7 +7,7 @@ fig, ax = plt.subplots()
 ax.set_xlim(0,100)
 ax.set_ylim(0,100)
 
-map_data = ax.imshow(np.zeros((100, 100)))
+map_data = ax.imshow(np.zeros((100, 100)), vmin=-1, vmax=1)
 
 def frame(n:int):
 	grid = np.zeros((100, 100))
@@ -18,7 +18,7 @@ def frame(n:int):
 
 	map_data.set_data(grid)
 
-	return map_data
+	return (map_data,)
 
 ani = FuncAnimation(fig, frame, range(1, 80, 2), interval=100, blit=False)
 plt.show()
