@@ -21,9 +21,13 @@ t_step = t_vals[1] - t_vals[0]
 animation_speed = 2
 
 # Wave Params
-wave_number = 1  # exact mode only
 w = 1    # Driving angular frequency
 A = 20   # Driving amplitude
+
+## exact mode only
+wave_number = 1  # exact mode only
+
+## fea mode only
 k = 0.5  # Spring constant (depending on simulation mode)
 B = 0.1  # Damping constant
 driving_range_size = 0.1
