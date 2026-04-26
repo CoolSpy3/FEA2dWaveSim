@@ -45,6 +45,7 @@ def exact_solution(mat):
 		for y_idx, y in enumerate(tqdm(y_vals, leave=False, delay=1)):
 			for x_idx, x in enumerate(x_vals):
 				r = np.sqrt(x**2 + (y - (max_y / 2))**2)
+				# Should this have a 1/sqrt(k) or something similar?
 				mat[n][y_idx][x_idx] = A*np.sin(wave_number*r - w*t) / (np.sqrt(r) or 1)
 
 def fea(mat):
