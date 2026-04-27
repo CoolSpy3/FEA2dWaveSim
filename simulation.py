@@ -11,7 +11,7 @@ from tqdm import tqdm
 #region Params
 
 # Grid Params
-x_vals = np.linspace(0, 10, 100)
+x_vals = np.linspace(0, 2, 100)
 y_vals = np.linspace(0, 10, 100)
 
 # Animation Params
@@ -22,7 +22,7 @@ animation_speed = 2
 
 # Wave Params
 w = 1    # Driving angular frequency
-A = 20   # Driving amplitude
+A = 2000   # Driving amplitude
 
 ## exact mode only
 wave_number = 1  # exact mode only
@@ -128,13 +128,6 @@ def fea(mat):
 
 #region Setup and Run
 
-# Initialize figure and output matrix
-fig, ax = plt.subplots()
-ax.set_xlim(min(x_vals), max(x_vals))
-ax.set_ylim(min(y_vals), max(y_vals))
-
-data_matrix = np.zeros((len(t_vals), len(y_vals), len(x_vals)))
-
 # Choose one and run the simulation
 simulation_func = \
 	exact_solution if propagation_mode == "exact" else \
@@ -146,6 +139,7 @@ if simulation_func is None:
 
 print("Running Simulation...")
 
+data_matrix = np.zeros((len(t_vals), len(y_vals), len(x_vals)))
 simulation_func(data_matrix)
 
 print(f"Done! Computed amplitudes fall in the range [{np.min(data_matrix)}, {np.max(data_matrix)}]")
@@ -155,6 +149,11 @@ print(f"Done! Computed amplitudes fall in the range [{np.min(data_matrix)}, {np.
 #region Show Output
 
 # Show the results!
+
+fig, ax = plt.subplots()
+ax.set_xlim(min(x_vals), max(x_vals))
+ax.set_ylim(min(y_vals), max(y_vals))
+
 map_data = ax.imshow(
 	np.zeros((len(y_vals), len(x_vals))),
 	vmin=np.min(data_matrix), vmax=np.max(data_matrix),
