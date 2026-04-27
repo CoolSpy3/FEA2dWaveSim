@@ -11,7 +11,7 @@ from tqdm import tqdm
 #region Params
 
 # Grid Params
-x_vals = np.linspace(0, 2, 100)
+x_vals = np.linspace(0, 10, 100)
 y_vals = np.linspace(0, 10, 100)
 
 # Animation Params
@@ -22,7 +22,7 @@ animation_speed = 2
 
 # Wave Params
 w = 1    # Driving angular frequency
-A = 2000   # Driving amplitude
+A = 20   # Driving amplitude
 
 ## exact mode only
 wave_number = 1  # exact mode only
