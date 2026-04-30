@@ -15,28 +15,63 @@ x_vals = np.linspace(0, 10, 100)
 y_vals = np.linspace(0, 10, 100)
 
 # Animation Params
-t_vals = np.linspace(0, 120, 1000)
+t_vals = np.linspace(0, 200, 100) #step size should be >  seconds
 t_step = t_vals[1] - t_vals[0]
 
-animation_speed = 2
+animation_speed = 10
 
 # Wave Params
 w = 1    # Driving angular frequency
 A = 20   # Driving amplitude
 
+propagation_mode = "fea"  # Valid options: "exact", "fea"
+
 ## exact mode only
 wave_number = 1  # exact mode only
 
 ## fea mode only
-k = 0.5  # Spring constant (depending on simulation mode)
-B = 0.1  # Damping constant
-driving_range_size = 0.1
+k = 2  # Spring constant (depending on simulation mode) Increases proportionatly to wavelength
+B = 0.00005  # Damping constant
 
-propagation_mode = "fea"  # Valid options: "exact", "fea"
+# Precalculate some stuff
+n_x_vals = len(x_vals)
+n_y_vals = len(y_vals)
+y_step = y_vals[1] - y_vals[0]
 
-#endregion
+# Boundary conditions
+driving_range_size = 0.01
+num_driving_points = max(1, driving_range_size // y_step)
+driving_range_min = (n_y_vals - num_driving_points) // 2
+driving_range_max = driving_range_min + num_driving_points
 
-#region Simulators
+def source(x, y):
+	if x < 0 and 20 <= y <= 25:
+		return True
+	elif x < 0 and 75 <= y <= 80:
+		return True
+	
+def outOfBounds(x, y):
+	in_box = 0 <= x < n_x_vals and 0 <= y < n_y_vals
+	
+	if (x-50)**2 + (y-50)**2 < 250:  # circle or radius 5
+		return True
+	if not in_box:
+		return True
+	return False
+
+
+# Returns nearest neighbors. Can we use this for boundary conditions?
+def neighbors(vals, x, y, driving_info):
+	if not outOfBounds(x, y):
+	#if 0 <= x < n_x_vals and 0 <= y < n_y_vals:
+		return (vals[0][y][x], vals[1][y][x])
+
+	if source(x, y):
+		return driving_info
+
+	return None
+
+# end region
 
 # Define possible simulators
 def exact_solution(mat):
@@ -48,21 +83,15 @@ def exact_solution(mat):
 				# Should this have a 1/sqrt(k) or something similar?
 				mat[n][y_idx][x_idx] = A*np.sin(wave_number*r - w*t) / (np.sqrt(r) or 1)
 
+
 def fea(mat):
-	# Precalculate some stuff
-	n_x_vals = len(x_vals)
-	n_y_vals = len(y_vals)
-	y_step = y_vals[1] - y_vals[0]
-	num_driving_points = max(1, driving_range_size // y_step)
-	driving_range_min = (n_y_vals - num_driving_points) // 2
-	driving_range_max = driving_range_min + num_driving_points
 
 	# matrix[0=pos, 1=vel][y][x]
 	working_size = (2, n_y_vals, n_x_vals)  # Size that we actually want use
 	y_vec_size = (2*n_x_vals*n_y_vals,)     # Size fed to scipy (flattened version of ^)
 
 	def ode_problem(t, v, progress_bar):
-		progress_bar.update(t-progress_bar.n)
+		progress_bar.update(round(t-progress_bar.n))
 
 		vals = v.reshape(working_size)
 		derivs = np.zeros(working_size)  # New array to store output
@@ -74,9 +103,12 @@ def fea(mat):
 		driving_pos = A * np.sin(w * t)
 		driving_vel = A * w * np.cos(w * t)
 
+		driving_info = (driving_pos, driving_vel)
+
 		# Calculate acceleration for each point
 		for y in range(n_y_vals):
 			for x in range(n_x_vals):
+
 				current_pos = vals[0][y][x]
 				current_vel = vals[1][y][x]
 
@@ -85,24 +117,17 @@ def fea(mat):
 				# For the position and velocity of each neighbor
 				# (use current pos/vel if neighbor doesn't exist
 				#  because then taking the difference -> 0)
-				for (pos, vel) in (
-					(
-						vals[0][y][x-1] if x > 0 else (driving_pos if driving_range_min <= y <= driving_range_max else current_pos),
-						vals[1][y][x-1] if x > 0 else (driving_vel if driving_range_min <= y <= driving_range_max else current_vel),
-	  				),
-					(
-						vals[0][y][x+1] if x < n_x_vals-1 else current_pos,
-						vals[1][y][x+1] if x < n_x_vals-1 else current_vel,
-	  				),
-					(
-						vals[0][y-1][x] if y > 0 else current_pos,
-						vals[1][y-1][x] if y > 0 else current_vel,
-	  				),
-					(
-						vals[0][y+1][x] if y < n_y_vals-1 else current_pos,
-						vals[1][y+1][x] if y < n_y_vals-1 else current_vel,
-	  				)
+				
+
+				for info in (
+					neighbors(vals, x-1, y, driving_info),
+					neighbors(vals, x+1, y, driving_info),
+					neighbors(vals, x, y-1, driving_info),
+					neighbors(vals, x, y+1, driving_info),
 				):
+					if info is None:
+						continue
+					pos, vel = info
 					# Spring and damper!
 					a += k * (pos - current_pos) + B * (vel - current_vel)
 
@@ -150,11 +175,11 @@ print(f"Done! Computed amplitudes fall in the range [{np.min(data_matrix)}, {np.
 
 # Show the results!
 
-fig, ax = plt.subplots()
-ax.set_xlim(min(x_vals), max(x_vals))
-ax.set_ylim(min(y_vals), max(y_vals))
+fig, (wave_sim, sensor) = plt.subplots(2)
+wave_sim.set_xlim(min(x_vals), max(x_vals))
+wave_sim.set_ylim(min(y_vals), max(y_vals))
 
-map_data = ax.imshow(
+map_data = wave_sim.imshow(
 	np.zeros((len(y_vals), len(x_vals))),
 	vmin=np.min(data_matrix), vmax=np.max(data_matrix),
 	extent=(min(x_vals), max(x_vals), min(y_vals), max(y_vals))
