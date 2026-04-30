@@ -15,7 +15,7 @@ x_vals = np.linspace(0, 10, 100)
 y_vals = np.linspace(0, 10, 100)
 
 # Animation Params
-t_vals = np.linspace(0, 200, 100) #step size should be >  seconds
+t_vals = np.linspace(0, 80, 200) #step size should be >  seconds
 t_step = t_vals[1] - t_vals[0]
 
 animation_speed = 10
@@ -32,6 +32,7 @@ wave_number = 1  # exact mode only
 ## fea mode only
 k = 2  # Spring constant (depending on simulation mode) Increases proportionatly to wavelength
 B = 0.00005  # Damping constant
+no_sponge = False
 
 # Precalculate some stuff
 n_x_vals = len(x_vals)
@@ -40,36 +41,39 @@ y_step = y_vals[1] - y_vals[0]
 
 # Boundary conditions
 driving_range_size = 0.01
-num_driving_points = max(1, driving_range_size // y_step)
+"""num_driving_points = max(1, driving_range_size // y_step)
 driving_range_min = (n_y_vals - num_driving_points) // 2
-driving_range_max = driving_range_min + num_driving_points
+driving_range_max = driving_range_min + num_driving_points"""
+
+def sponge(x, y):
+	if no_sponge:
+		return False
+
+	if (x-50)**2 + (y-50)**2 < 250:  # circle or radius 5
+		return True
+
+	# layer around the edge
+	if 0 <= x <= 2:
+		return True
+	if n_x_vals-3 <= x <= n_x_vals-1:
+		return True
+	if 0 <= y <= 2:
+		return True
+	if n_y_vals-3 <= y <= n_y_vals-1:
+		return True
 
 def source(x, y):
-	if x < 0 and 20 <= y <= 25:
+	if 3 < x <= 5 and 20 <= y <= 25:
 		return True
-	elif x < 0 and 75 <= y <= 80:
-		return True
+	#elif x <= 15 and 75 <= y <= 80:
+		#return True
 	
 def outOfBounds(x, y):
 	in_box = 0 <= x < n_x_vals and 0 <= y < n_y_vals
-	
-	if (x-50)**2 + (y-50)**2 < 250:  # circle or radius 5
-		return True
+
 	if not in_box:
 		return True
 	return False
-
-
-# Returns nearest neighbors. Can we use this for boundary conditions?
-def neighbors(vals, x, y, driving_info):
-	if not outOfBounds(x, y):
-	#if 0 <= x < n_x_vals and 0 <= y < n_y_vals:
-		return (vals[0][y][x], vals[1][y][x])
-
-	if source(x, y):
-		return driving_info
-
-	return None
 
 # end region
 
@@ -118,18 +122,21 @@ def fea(mat):
 				# (use current pos/vel if neighbor doesn't exist
 				#  because then taking the difference -> 0)
 				
+				neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
 
-				for info in (
-					neighbors(vals, x-1, y, driving_info),
-					neighbors(vals, x+1, y, driving_info),
-					neighbors(vals, x, y-1, driving_info),
-					neighbors(vals, x, y+1, driving_info),
-				):
-					if info is None:
+				for nei_x, nei_y in neighbors:
+					if source(nei_x, nei_y):
+						pos, vel = driving_info
+					elif not outOfBounds(nei_x, nei_y):
+						pos, vel = (vals[0][nei_y][nei_x], vals[1][nei_y][nei_x])
+					else:
 						continue
-					pos, vel = info
+
 					# Spring and damper!
-					a += k * (pos - current_pos) + B * (vel - current_vel)
+					if sponge(x, y):
+						a += 0 * (pos - current_pos) + B*1000 * (vel - current_vel)
+					else:
+						a += k * (pos - current_pos) + B * (vel - current_vel)
 
 				# dv/dt = a
 				derivs[1][y][x] = a
