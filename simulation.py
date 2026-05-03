@@ -45,25 +45,29 @@ driving_range_size = 0.01
 driving_range_min = (n_y_vals - num_driving_points) // 2
 driving_range_max = driving_range_min + num_driving_points"""
 
+# Absorbative Boundary Condition (drag sponge field)
+sponge_thickness = 10
+gamma_max = 2  # has to be less than 2
+
+# returns the drag coefficient gamma of the ABC sponge
 def sponge(x, y):
 	if no_sponge:
-		return False
+		return 0
 
-	if (x-50)**2 + (y-50)**2 < 250:  # circle or radius 5
-		return True
+	R = np.sqrt(250)
+	if (x-50)**2 + (y-50)**2 < R**2:  # circle
+		depth = R - np.sqrt((x-50)**2 + (y-50)**2)
+		return gamma_max * (depth/R) ** 2
 
 	# layer around the edge
-	if 0 <= x <= 2:
-		return True
-	if n_x_vals-3 <= x <= n_x_vals-1:
-		return True
-	if 0 <= y <= 2:
-		return True
-	if n_y_vals-3 <= y <= n_y_vals-1:
-		return True
+	d_into_sponge = max(0, sponge_thickness-x, sponge_thickness-y, x-n_x_vals+sponge_thickness, y-n_y_vals+sponge_thickness)
+	if d_into_sponge > 0:
+		return gamma_max * (d_into_sponge/sponge_thickness) ** 2
+	
+	return 0
 
 def source(x, y):
-	if 3 < x <= 5 and 20 <= y <= 25:
+	if 20 < x <= 25 and 20 <= y <= 25:
 		return True
 	#elif x <= 15 and 75 <= y <= 80:
 		#return True
@@ -89,7 +93,6 @@ def exact_solution(mat):
 
 
 def fea(mat):
-
 	# matrix[0=pos, 1=vel][y][x]
 	working_size = (2, n_y_vals, n_x_vals)  # Size that we actually want use
 	y_vec_size = (2*n_x_vals*n_y_vals,)     # Size fed to scipy (flattened version of ^)
@@ -133,10 +136,12 @@ def fea(mat):
 						continue
 
 					# Spring and damper!
-					if sponge(x, y):
-						a += 0 * (pos - current_pos) + B*1000 * (vel - current_vel)
-					else:
-						a += k * (pos - current_pos) + B * (vel - current_vel)
+					a += k * (pos - current_pos) + B * (vel - current_vel)
+
+				# Drag into the sponge
+				gamma = sponge(x, y)
+				if gamma > 0:
+					a -= gamma * current_vel
 
 				# dv/dt = a
 				derivs[1][y][x] = a
