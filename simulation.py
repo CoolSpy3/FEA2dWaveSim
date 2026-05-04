@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.fft import fft, ifft, fftfreq
 from scipy.integrate import solve_ivp
+from scipy.odr import Model, Data, ODR
+from scipy.sparse import csr_matrix
 from tqdm import tqdm
 
 #endregion
@@ -42,9 +44,9 @@ y_step = y_vals[1] - y_vals[0]
 
 # Boundary conditions
 driving_range_size = 0.01
-"""num_driving_points = max(1, driving_range_size // y_step)
+num_driving_points = max(1, driving_range_size // y_step)
 driving_range_min = (n_y_vals - num_driving_points) // 2
-driving_range_max = driving_range_min + num_driving_points"""
+driving_range_max = driving_range_min + num_driving_points
 
 # Absorbative Boundary Condition (drag sponge field)
 sponge_thickness = 10
@@ -55,10 +57,10 @@ def apply_sponge(x, y):
 	if not sponge:
 		return 0
 
-	R = np.sqrt(250)
-	if (x-50)**2 + (y-50)**2 < R**2:  # circle
-		depth = R - np.sqrt((x-50)**2 + (y-50)**2)
-		return gamma_max * (depth/R) ** 2
+	# R = np.sqrt(250)
+	# if (x-50)**2 + (y-50)**2 < R**2:  # circle
+	# 	depth = R - np.sqrt((x-50)**2 + (y-50)**2)
+	# 	return gamma_max * (depth/R) ** 2
 
 	# layer around the edge
 	d_into_sponge = max(0, sponge_thickness-x, sponge_thickness-y, x-n_x_vals+sponge_thickness, y-n_y_vals+sponge_thickness)
@@ -72,17 +74,16 @@ sensor_x_idx = len(x_vals) // 4
 sensor_y_idx = len(y_vals) // 2
 
 def source(x, y):
-	if 20 < x <= 25 and 20 <= y <= 25:
-		return True
-	#elif x <= 15 and 75 <= y <= 80:
-		#return True
+	return x < 0 and driving_range_min <= y <= driving_range_max
+	# if 20 < x <= 25 and 20 <= y <= 25:
+	# 	return True
+	# #elif x <= 15 and 75 <= y <= 80:
+	# 	#return True
 
 def outOfBounds(x, y):
 	in_box = 0 <= x < n_x_vals and 0 <= y < n_y_vals
 
-	if not in_box:
-		return True
-	return False
+	return not in_box
 
 # end region
 
@@ -183,7 +184,7 @@ print(f"Done! Computed amplitudes fall in the range [{np.min(data_matrix)}, {np.
 
 # Show the results!
 
-fig, ((wave_sim, sensor, raw_transform_real), (raw_transform_imag, processed_transform, _)) = plt.subplots(2, 3)
+fig, (wave_sim, sensor) = plt.subplots(2)
 wave_sim.set_xlim(min(x_vals), max(x_vals))
 wave_sim.set_ylim(min(y_vals), max(y_vals))
 
@@ -196,16 +197,23 @@ map_data = wave_sim.imshow(
 sensor_data = data_matrix[:,sensor_y_idx,sensor_x_idx]
 sensor.plot(t_vals, sensor_data)
 
-clip_pane_start = [v > A/2 for v in sensor_data].index(True)
+# clip_pane_start = [v > A/11 for v in sensor_data].index(True)
+clip_pane_start = 0
 clipped_sensor_data = sensor_data[clip_pane_start:]
 sensor.axvline(t_vals[clip_pane_start])
 
-w = fft(clipped_sensor_data)
-raw_transform_real.plot(np.real(w), 'o-')
-raw_transform_imag.plot(np.imag(w), 'ro-')
+def fit_func(p, x):
+	a, b, c, d = p
+	# return a * np.exp(b * x) * np.sin(c * x + d)
+	return np.sin(c * x + d)
 
-freqs = fftfreq(len(w), t_step)
-processed_transform.plot(freqs, np.abs(w))
+sensor_data_clipped = Data(t_vals[clip_pane_start:], sensor_data[clip_pane_start:])
+odr = ODR(sensor_data_clipped, Model(fit_func), beta0=[1]*4)
+fit = odr.run()
+
+fit.pprint()
+
+sensor.plot(sensor_data_clipped.x, fit_func(fit.beta, sensor_data_clipped.x))
 
 def frame(n):
 	map_data.set_data(data_matrix[n])
