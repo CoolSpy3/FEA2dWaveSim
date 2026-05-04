@@ -100,63 +100,55 @@ def exact_solution(mat):
 def fea(mat):
 	# matrix[0=pos, 1=vel][y][x]
 	working_size = (2, n_y_vals, n_x_vals)  # Size that we actually want use
-	y_vec_size = (2*n_x_vals*n_y_vals,)     # Size fed to scipy (flattened version of ^)
+	y_vec_len = 2*n_x_vals*n_y_vals         # Length fed to scipy (flattened version of ^)
+
+	idx_lookup_table = np.arange(y_vec_len).reshape(working_size)
+	def idx(xv, y, x):
+		return idx_lookup_table[xv,y,x]
+
+	# [to, from]
+	accel_map = np.zeros((y_vec_len, y_vec_len))
+	drive_mat = np.zeros(y_vec_len)
+
+	for y in range(n_y_vals):
+		for x in range(n_x_vals):
+			pos_loc_idx = idx(0, y, x)
+			vel_loc_idx = idx(1, y, x)
+			accel_map[pos_loc_idx, vel_loc_idx] = 1
+
+			neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
+
+			for nei_x, nei_y in neighbors:
+				if source(nei_x, nei_y):
+					drive_mat[vel_loc_idx] = 1
+					accel_map[vel_loc_idx, pos_loc_idx] -= k
+					accel_map[vel_loc_idx, vel_loc_idx] -= B
+				elif not outOfBounds(nei_x, nei_y):
+					accel_map[vel_loc_idx, idx(0, nei_y, nei_x)] += k
+					accel_map[vel_loc_idx, pos_loc_idx] -= k
+					accel_map[vel_loc_idx, idx(1, nei_y, nei_x)] += B
+					accel_map[vel_loc_idx, vel_loc_idx] -= B
+
+			# Drag into the sponge
+			if gamma := apply_sponge(x, y) > 0:
+				accel_map[vel_loc_idx, vel_loc_idx] -= gamma
+
+	accel_map = csr_matrix(accel_map)  # Convert to csr matrix for speedy matrix-vector multiplications
 
 	def ode_problem(t, v, progress_bar):
 		progress_bar.update(round(t, 3)-progress_bar.n)
-
-		vals = v.reshape(working_size)
-		derivs = np.zeros(working_size)  # New array to store output
-
-		# dx/dt = v
-		derivs[0] = vals[1]
 
 		# Compute driving force
 		driving_pos = A * np.sin(w * t)
 		driving_vel = A * w * np.cos(w * t)
 
-		driving_info = (driving_pos, driving_vel)
-
-		# Calculate acceleration for each point
-		for y in range(n_y_vals):
-			for x in range(n_x_vals):
-
-				current_pos = vals[0][y][x]
-				current_vel = vals[1][y][x]
-
-				a = 0
-
-				# For the position and velocity of each neighbor
-				# (use current pos/vel if neighbor doesn't exist
-				#  because then taking the difference -> 0)
-
-				neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
-
-				for nei_x, nei_y in neighbors:
-					if source(nei_x, nei_y):
-						pos, vel = driving_info
-					elif not outOfBounds(nei_x, nei_y):
-						pos, vel = (vals[0][nei_y][nei_x], vals[1][nei_y][nei_x])
-					else:
-						continue
-
-					# Spring and damper!
-					a += k * (pos - current_pos) + B * (vel - current_vel)
-
-				# Drag into the sponge
-				if gamma := apply_sponge(x, y) > 0:
-					a -= gamma * current_vel
-
-				# dv/dt = a
-				derivs[1][y][x] = a
-
-		return derivs.reshape(y_vec_size)
+		return accel_map.dot(v) + (drive_mat * (k * driving_pos + B * driving_vel))
 
 	with tqdm(total=max(t_vals), disable=False) as progress_bar:
 		values = solve_ivp(
 			ode_problem,
 			[min(t_vals), max(t_vals)],
-			np.zeros(y_vec_size),
+			np.zeros(y_vec_len),
 			t_eval=t_vals,
 			args=(progress_bar,)
 		)
