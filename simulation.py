@@ -107,33 +107,33 @@ def fea(mat):
 		return idx_lookup_table[xv,y,x]
 
 	# [to, from]
-	accel_map = np.zeros((y_vec_len, y_vec_len))
-	drive_mat = np.zeros(y_vec_len)
+	deriv_mat = np.zeros((y_vec_len, y_vec_len))
+	drive_vec = np.zeros(y_vec_len)
 
 	for y in range(n_y_vals):
 		for x in range(n_x_vals):
 			pos_loc_idx = idx(0, y, x)
 			vel_loc_idx = idx(1, y, x)
-			accel_map[pos_loc_idx, vel_loc_idx] = 1
+			deriv_mat[pos_loc_idx, vel_loc_idx] = 1
 
 			neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
 
 			for nei_x, nei_y in neighbors:
 				if source(nei_x, nei_y):
-					drive_mat[vel_loc_idx] = 1
-					accel_map[vel_loc_idx, pos_loc_idx] -= k
-					accel_map[vel_loc_idx, vel_loc_idx] -= B
+					drive_vec[vel_loc_idx] = 1
+					deriv_mat[vel_loc_idx, pos_loc_idx] -= k
+					deriv_mat[vel_loc_idx, vel_loc_idx] -= B
 				elif not outOfBounds(nei_x, nei_y):
-					accel_map[vel_loc_idx, idx(0, nei_y, nei_x)] += k
-					accel_map[vel_loc_idx, pos_loc_idx] -= k
-					accel_map[vel_loc_idx, idx(1, nei_y, nei_x)] += B
-					accel_map[vel_loc_idx, vel_loc_idx] -= B
+					deriv_mat[vel_loc_idx, idx(0, nei_y, nei_x)] += k
+					deriv_mat[vel_loc_idx, pos_loc_idx] -= k
+					deriv_mat[vel_loc_idx, idx(1, nei_y, nei_x)] += B
+					deriv_mat[vel_loc_idx, vel_loc_idx] -= B
 
 			# Drag into the sponge
 			if gamma := apply_sponge(x, y) > 0:
-				accel_map[vel_loc_idx, vel_loc_idx] -= gamma
+				deriv_mat[vel_loc_idx, vel_loc_idx] -= gamma
 
-	accel_map = csr_matrix(accel_map)  # Convert to csr matrix for speedy matrix-vector multiplications
+	deriv_mat = csr_matrix(deriv_mat)  # Convert to csr matrix for speedy matrix-vector multiplications
 
 	def ode_problem(t, v, progress_bar):
 		progress_bar.update(round(t, 3)-progress_bar.n)
@@ -142,9 +142,9 @@ def fea(mat):
 		driving_pos = A * np.sin(w * t)
 		driving_vel = A * w * np.cos(w * t)
 
-		return accel_map.dot(v) + (drive_mat * (k * driving_pos + B * driving_vel))
+		return deriv_mat.dot(v) + (drive_vec * (k * driving_pos + B * driving_vel))
 
-	with tqdm(total=max(t_vals), disable=False) as progress_bar:
+	with tqdm(total=max(t_vals)) as progress_bar:
 		values = solve_ivp(
 			ode_problem,
 			[min(t_vals), max(t_vals)],
