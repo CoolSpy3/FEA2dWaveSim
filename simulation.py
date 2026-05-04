@@ -3,6 +3,7 @@
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.fft import fft, ifft, fftfreq
 from scipy.integrate import solve_ivp
 from tqdm import tqdm
 
@@ -15,7 +16,7 @@ x_vals = np.linspace(0, 10, 100)
 y_vals = np.linspace(0, 10, 100)
 
 # Animation Params
-t_vals = np.linspace(0, 80, 200) #step size should be >  seconds
+t_vals = np.linspace(0, 80, 100) #step size should be >  seconds
 t_step = t_vals[1] - t_vals[0]
 
 animation_speed = 10
@@ -66,12 +67,16 @@ def sponge(x, y):
 	
 	return 0
 
+# Sensor params
+sensor_x_idx = len(x_vals) // 4
+sensor_y_idx = len(y_vals) // 2
+
 def source(x, y):
 	if 20 < x <= 25 and 20 <= y <= 25:
 		return True
 	#elif x <= 15 and 75 <= y <= 80:
 		#return True
-	
+
 def outOfBounds(x, y):
 	in_box = 0 <= x < n_x_vals and 0 <= y < n_y_vals
 
@@ -98,7 +103,7 @@ def fea(mat):
 	y_vec_size = (2*n_x_vals*n_y_vals,)     # Size fed to scipy (flattened version of ^)
 
 	def ode_problem(t, v, progress_bar):
-		progress_bar.update(round(t-progress_bar.n))
+		progress_bar.update(round(t, 3)-progress_bar.n)
 
 		vals = v.reshape(working_size)
 		derivs = np.zeros(working_size)  # New array to store output
@@ -124,7 +129,7 @@ def fea(mat):
 				# For the position and velocity of each neighbor
 				# (use current pos/vel if neighbor doesn't exist
 				#  because then taking the difference -> 0)
-				
+
 				neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
 
 				for nei_x, nei_y in neighbors:
@@ -187,7 +192,7 @@ print(f"Done! Computed amplitudes fall in the range [{np.min(data_matrix)}, {np.
 
 # Show the results!
 
-fig, (wave_sim, sensor) = plt.subplots(2)
+fig, ((wave_sim, sensor, raw_transform_real), (raw_transform_imag, processed_transform, _)) = plt.subplots(2, 3)
 wave_sim.set_xlim(min(x_vals), max(x_vals))
 wave_sim.set_ylim(min(y_vals), max(y_vals))
 
@@ -197,8 +202,22 @@ map_data = wave_sim.imshow(
 	extent=(min(x_vals), max(x_vals), min(y_vals), max(y_vals))
 )
 
+sensor_data = data_matrix[:,sensor_y_idx,sensor_x_idx]
+sensor.plot(t_vals, sensor_data)
+
+clip_pane_start = [v > A/2 for v in sensor_data].index(True)
+clipped_sensor_data = sensor_data[clip_pane_start:]
+sensor.axvline(t_vals[clip_pane_start])
+
+w = fft(clipped_sensor_data)
+raw_transform_real.plot(np.real(w), 'o-')
+raw_transform_imag.plot(np.imag(w), 'ro-')
+
+freqs = fftfreq(len(w), t_step)
+processed_transform.plot(freqs, np.abs(w))
+
 def frame(n):
-	map_data.set_data(data_matrix[n])
+	map_data.set_data(data_matrix[n], np.abs(w), 'ro-')
 
 	return (map_data,)
 
