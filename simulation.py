@@ -33,7 +33,7 @@ wave_number = 1  # exact mode only
 ## fea mode only
 k = 2  # Spring constant (depending on simulation mode) Increases proportionatly to wavelength
 B = 0.00005  # Damping constant
-no_sponge = False
+sponge = True
 
 # Precalculate some stuff
 n_x_vals = len(x_vals)
@@ -51,8 +51,8 @@ sponge_thickness = 10
 gamma_max = 2  # has to be less than 2
 
 # returns the drag coefficient gamma of the ABC sponge
-def sponge(x, y):
-	if no_sponge:
+def apply_sponge(x, y):
+	if not sponge:
 		return 0
 
 	R = np.sqrt(250)
@@ -64,7 +64,7 @@ def sponge(x, y):
 	d_into_sponge = max(0, sponge_thickness-x, sponge_thickness-y, x-n_x_vals+sponge_thickness, y-n_y_vals+sponge_thickness)
 	if d_into_sponge > 0:
 		return gamma_max * (d_into_sponge/sponge_thickness) ** 2
-	
+
 	return 0
 
 # Sensor params
@@ -144,8 +144,7 @@ def fea(mat):
 					a += k * (pos - current_pos) + B * (vel - current_vel)
 
 				# Drag into the sponge
-				gamma = sponge(x, y)
-				if gamma > 0:
+				if gamma := apply_sponge(x, y) > 0:
 					a -= gamma * current_vel
 
 				# dv/dt = a
