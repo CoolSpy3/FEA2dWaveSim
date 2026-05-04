@@ -217,7 +217,7 @@ freqs = fftfreq(len(w), t_step)
 processed_transform.plot(freqs, np.abs(w))
 
 def frame(n):
-	map_data.set_data(data_matrix[n], np.abs(w), 'ro-')
+	map_data.set_data(data_matrix[n])
 
 	return (map_data,)
 
