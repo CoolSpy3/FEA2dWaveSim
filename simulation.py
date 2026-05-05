@@ -47,7 +47,7 @@ driving_range_max = driving_range_min + num_driving_points"""
 
 # Absorbative Boundary Condition (drag sponge field)
 sponge_thickness = 10
-gamma_max = 2  # has to be less than 2
+alpha = 1  # has to be less than 2
 
 # returns the drag coefficient gamma of the ABC sponge
 def sponge(x, y):
@@ -57,17 +57,17 @@ def sponge(x, y):
 	R = np.sqrt(250)
 	if (x-50)**2 + (y-50)**2 < R**2:  # circle
 		depth = R - np.sqrt((x-50)**2 + (y-50)**2)
-		return gamma_max * (depth/R) ** 2
+		return alpha * np.sin(np.pi/2*depth/R) ** 2
 
 	# layer around the edge
 	d_into_sponge = max(0, sponge_thickness-x, sponge_thickness-y, x-n_x_vals+sponge_thickness, y-n_y_vals+sponge_thickness)
 	if d_into_sponge > 0:
-		return gamma_max * (d_into_sponge/sponge_thickness) ** 2
+		return alpha * np.sin(np.pi/2*d_into_sponge/sponge_thickness) ** 2
 	
 	return 0
 
 def source(x, y):
-	if 20 < x <= 25 and 20 <= y <= 25:
+	if 20 < x <= 23 and 20 <= y <= 23:
 		return True
 	#elif x <= 15 and 75 <= y <= 80:
 		#return True
