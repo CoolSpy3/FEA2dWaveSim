@@ -22,8 +22,8 @@ n_x_vals = 100
 n_y_vals = 100
 
 # Animation Params
-t_vals = np.linspace(0, 120, 500)
-animation_speed = 10
+t_vals = np.linspace(0, 60, 300)
+animation_speed = 20
 
 # Wave Params
 w = 1    # Driving angular frequency
@@ -36,7 +36,7 @@ wave_number = 1
 
 ## fea mode only
 k = 2  # Spring constant (Increases proportionally to wavelength)
-B = 0  # Damping constant (removed in latest model iteration)
+B = 0.05  # Damping constant (removed in latest model iteration)
 
 # Absorptive Boundary Condition (drag sponge field)
 sponge = True
@@ -51,8 +51,10 @@ y_step = abs(y_vals[1] - y_vals[0])
 t_step = abs(t_vals[1] - t_vals[0])
 
 # Sensor params
-sensor_x_idx = len(x_vals) // 4
-sensor_y_idx = len(y_vals) // 2
+sensor_pos = 2.3, 5
+
+sensor_x_idx = int(sensor_pos[0] // x_step)
+sensor_y_idx = int(sensor_pos[1] // y_step)
 
 # Place stuff on the grid!
 
@@ -62,7 +64,8 @@ sources = [
 ]
 
 def sponge_func(dist, max_dist):
-	return gamma_max * (max(0, np.cos((np.pi/2) * (dist/max_dist))) ** 3)
+	return gamma_max * (max(0, np.cos((np.pi/2) * (dist/max_dist))) ** 3)	
+
 
 # Format: [(Geom, < (geom,point)->sponge_factor > or < None > if hard boundary)]
 obstacles = [
@@ -88,7 +91,13 @@ obstacles = [
 			border.outer_rect.dist_to_border(x*x_step, y*y_step),
 			border.thickness
 		)
-	) if sponge else None
+	) if sponge else None,
+	# Circle
+	(
+		Circle (
+			7, 5, 2
+		), None
+	)
 ]
 
 # Allows us to use None as a null-obstacle.
@@ -140,52 +149,58 @@ def fea(mat):
 	# Now, populate the matrices for all x,y pairs!
 	for y in tqdm(range(n_y_vals)):
 		for x in range(n_x_vals):
-			# Cache the index of (x, y) in the scipy vector
-			pos_loc_idx = idx(0, y, x)
-			vel_loc_idx = idx(1, y, x)
-
-			# dx/dt = 1*v
-			deriv_mat[pos_loc_idx, vel_loc_idx] = 1
-
-			# dv/dt is sum of effects from neighbors (and sponges)
-			neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
-			for nei_x, nei_y in neighbors:
-				is_source = False
-				for source_idx, (source_geom, A, _) in enumerate(sources):
-					if source_geom.contains_raw_point(nei_x, nei_y, x_step, y_step):
-						is_source = True
-						# Include source <source_idx> with amplitude A
-						# Will be scaled by (k * source_pos + B * source_vel)
-						source_mat[vel_loc_idx, source_idx] = A
-						# Subtract k * pos + B * vel so that the overall algebra becomes
-						# k * (source_pos - pos) + B * (source_vel - vel)
-						deriv_mat[vel_loc_idx, pos_loc_idx] -= k
-						deriv_mat[vel_loc_idx, vel_loc_idx] -= B
-
-				# If this point is a source, it's values are determined completely by the source behavior.
-				# Whatever values the simulation calculates for it must be discarded!
-				if is_source:
-					continue
-
-				for (obstacle_geom, sponge_behavior) in obstacles:
-					if obstacle_geom.contains_raw_point(nei_x, nei_y, x_step, y_step) and \
+			for (obstacle_geom, sponge_behavior) in obstacles:
+					if obstacle_geom.contains_raw_point(x, y, x_step, y_step) and \
 							sponge_behavior is None:  # Hard boundary
 						break  # Causes else to be skipped
-				else:  # For-else: If for loop not broken (and, thus, not at a boundary),
-					# Apply neighboring effects (see source math).
-					# This is the same, but all the data's already in the state vec,
-					# so we can do this with just one matrix
-					deriv_mat[vel_loc_idx, idx(0, nei_y, nei_x)] += k
-					deriv_mat[vel_loc_idx, pos_loc_idx] -= k
-					deriv_mat[vel_loc_idx, idx(1, nei_y, nei_x)] += B
-					deriv_mat[vel_loc_idx, vel_loc_idx] -= B
+			else:
 
-			# Sponges create drag at a point, regardless of neighboring behavior
-			for (obstacle_geom, sponge_behavior) in obstacles:
-				if obstacle_geom.contains_raw_point(nei_x, nei_y, x_step, y_step) and \
-						sponge_behavior is not None:  # Sponge boundary
-					# dv/dt += sponge_behavior * (-v)
-					deriv_mat[vel_loc_idx, vel_loc_idx] -= sponge_behavior(obstacle_geom, x, y)
+				# Cache the index of (x, y) in the scipy vector
+				pos_loc_idx = idx(0, y, x)
+				vel_loc_idx = idx(1, y, x)
+
+				# dx/dt = 1*v
+				deriv_mat[pos_loc_idx, vel_loc_idx] = 1
+
+				# dv/dt is sum of effects from neighbors (and sponges)
+				neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
+				for nei_x, nei_y in neighbors:
+					is_source = False
+					for source_idx, (source_geom, A, _) in enumerate(sources):
+						if source_geom.contains_raw_point(nei_x, nei_y, x_step, y_step):
+							is_source = True
+							# Include source <source_idx> with amplitude A
+							# Will be scaled by (k * source_pos + B * source_vel)
+							source_mat[vel_loc_idx, source_idx] = A
+							# Subtract k * pos + B * vel so that the overall algebra becomes
+							# k * (source_pos - pos) + B * (source_vel - vel)
+							deriv_mat[vel_loc_idx, pos_loc_idx] -= k
+							deriv_mat[vel_loc_idx, vel_loc_idx] -= B
+
+					# If this point is a source, it's values are determined completely by the source behavior.
+					# Whatever values the simulation calculates for it must be discarded!
+					#if is_source:
+						#continue
+
+					for (obstacle_geom, sponge_behavior) in obstacles:
+						if obstacle_geom.contains_raw_point(nei_x, nei_y, x_step, y_step) and \
+								sponge_behavior is None:  # Hard boundary
+							break  # Causes else to be skipped
+					else:  # For-else: If for loop not broken (and, thus, not at a boundary),
+						# Apply neighboring effects (see source math).
+						# This is the same, but all the data's already in the state vec,
+						# so we can do this with just one matrix
+						deriv_mat[vel_loc_idx, idx(0, nei_y, nei_x)] += k
+						deriv_mat[vel_loc_idx, pos_loc_idx] -= k
+						deriv_mat[vel_loc_idx, idx(1, nei_y, nei_x)] += B
+						deriv_mat[vel_loc_idx, vel_loc_idx] -= B
+
+				# Sponges create drag at a point, regardless of neighboring behavior
+				for (obstacle_geom, sponge_behavior) in obstacles:
+					if obstacle_geom.contains_raw_point(nei_x, nei_y, x_step, y_step) and \
+							sponge_behavior is not None:  # Sponge boundary
+						# dv/dt += sponge_behavior * (-v)
+						deriv_mat[vel_loc_idx, vel_loc_idx] -= sponge_behavior(obstacle_geom, x, y)
 
 	print("Computing efficient representation...")
 
@@ -204,9 +219,9 @@ def fea(mat):
 		progress_bar.update(round(t, 3)-progress_bar.n)
 
 		# Compute driving forces (amplitudes are already stored in source_mat)
-		source_positions = np.sin(source_freqs * t)
+		source_positions = np.sin(source_freqs * t) if t < 0.05 else source_freqs * 0
 		# Derivative of ^
-		source_velocities = source_freqs * np.cos(source_freqs * t)  # Here * performs an element-wise product, so this is correct
+		source_velocities = source_freqs * np.cos(source_freqs * t) if t < 0.05 else source_freqs * 0  # Here * performs an element-wise product, so this is correct
 
 		# Multiply the right things to make the math discussed above work and then add all the effects together
 		return deriv_mat.dot(v) + source_mat.dot(k * source_positions + B * source_velocities)
@@ -280,14 +295,14 @@ current_time = sensor.axvline(0)
 def fit_func(x, p):
 	a, b, c, d, e, f = p
 	# return a * np.exp(b * x) * np.sin(c * x + d)
-	return a * np.sin(b * x + c) + d * np.sin(e * x + f)
+	return a * np.sin(b * x + c)
 
 sensor_data_clipped = (t_vals[clip_pane_start:], sensor_data[clip_pane_start:])
 fit = odr_fit(fit_func, *sensor_data_clipped, [1, 1, 1, 1, 2, 1])
 
 print(fit.beta)
 
-sensor.plot(sensor_data_clipped[0], fit_func(sensor_data_clipped[0], fit.beta))
+# sensor.plot(sensor_data_clipped[0], fit_func(sensor_data_clipped[0], fit.beta))
 
 # Now, animate it!
 
