@@ -36,7 +36,7 @@ wave_number = 1  # exact mode only
 
 ## fea mode only
 k = 2  # Spring constant (depending on simulation mode) Increases proportionatly to wavelength
-B = 0.00005  # Damping constant
+B = 0  # Damping constant (removed in latest model iteration)
 
 # Absorptive Boundary Condition (drag sponge field)
 sponge = True
