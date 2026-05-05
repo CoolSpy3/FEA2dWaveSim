@@ -61,17 +61,8 @@ sources = [
 	(Point(2, 5), A, w)
 ]
 
-def sponge_func(border, x, y):
-	# Max distance into sponge in one direction
-	d_into_sponge = border.thickness - min(
-		abs(x - border.outer_rect.x_min), abs(x - border.outer_rect.x_max),
-		abs(y - border.outer_rect.y_min), abs(y - border.outer_rect.y_max)
-		) 
-
-	if 0 < d_into_sponge < border.thickness:
-		return gamma_max * np.sin(np.pi/2 * d_into_sponge/border.thickness) ** 3
-	else:
-		return 0
+def sponge_func(dist, max_dist):
+	return gamma_max * (max(0, np.cos((np.pi/2) * (dist/max_dist))) ** 3)
 
 # Format: [(Geom, < (geom,point)->sponge_factor > or < None > if hard boundary)]
 obstacles = [
@@ -93,7 +84,10 @@ obstacles = [
 			x_origin, y_origin,
 			sim_width, sim_height,
 			sponge_thickness
-		), lambda border, x, y: sponge_func(border, x * x_step, y * y_step)
+		), lambda border, x, y: sponge_func(
+			border.outer_rect.dist_to_border(x*x_step, y*y_step),
+			border.thickness
+		)
 	) if sponge else None
 ]
 
