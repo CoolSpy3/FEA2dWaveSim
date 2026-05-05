@@ -32,10 +32,10 @@ A = 20   # Driving amplitude
 propagation_mode = "fea"  # Valid options: "exact", "fea"
 
 ## exact mode only
-wave_number = 1  # exact mode only
+wave_number = 1
 
 ## fea mode only
-k = 2  # Spring constant (depending on simulation mode) Increases proportionatly to wavelength
+k = 2  # Spring constant (Increases proportionally to wavelength)
 B = 0  # Damping constant (removed in latest model iteration)
 
 # Absorptive Boundary Condition (drag sponge field)
@@ -50,9 +50,15 @@ x_step = abs(x_vals[1] - x_vals[0])
 y_step = abs(y_vals[1] - y_vals[0])
 t_step = abs(t_vals[1] - t_vals[0])
 
-# [(Geom, Amplitude, Angular Freq)]
+# Sensor params
+sensor_x_idx = len(x_vals) // 4
+sensor_y_idx = len(y_vals) // 2
+
+# Place stuff on the grid!
+
+# Format: [(Geom, Amplitude, Angular Freq)]
 sources = [
-	(Point(2, 5, rtol=0, atol=max(x_step, y_step)), A, w)
+	(Point(2, 5), A, w)
 ]
 
 def sponge_func(border, x, y):
@@ -67,17 +73,21 @@ def sponge_func(border, x, y):
 	else:
 		return 0
 
-# [(Geom, (geom,point)->sponge factor or None if hard bound)]
+# Format: [(Geom, < (geom,point)->sponge_factor > or < None > if hard boundary)]
 obstacles = [
-	# There must be a hard border around the simulation or else we'll try to calculate out of bounds points
+	# There must be a hard border around the simulation or else it'll try to calculate out of bounds points
 	(
 		Border(
+			# Set it to be all the points just outside of the valid grid space, minus
 			x_origin, y_origin,
 			n_x_vals, n_y_vals,
-			2, False, True  # Over-sized outside border
-		), None
+			# thickness = 2 to give another cell of extra padding just-in-case
+			2,
+			False,  # Place around the grid; not in it
+			True    # Above values are in grid-coordinates
+		), None  # Hard boundary
 	),
-	# Conditional sponge
+	# Conditional sponge border
 	(
 		Border(
 			x_origin, y_origin,
@@ -86,10 +96,6 @@ obstacles = [
 		), lambda border, x, y: sponge_func(border, x * x_step, y * y_step)
 	) if sponge else None
 ]
-
-# Sensor params
-sensor_x_idx = len(x_vals) // 4
-sensor_y_idx = len(y_vals) // 2
 
 # Allows us to use None as a null-obstacle.
 while None in obstacles:
@@ -117,34 +123,37 @@ def exact_solution(mat):
 def fea(mat):
 	print("Preparing Grid...")
 
-	# matrix[0=pos, 1=vel][y][x]
+	# Format: matrix[0=pos, 1=vel][y][x]
 	working_size = (2, n_y_vals, n_x_vals)  # Size that we actually want use
-	y_vec_len = 2*n_x_vals*n_y_vals         # Length fed to scipy (flattened version of ^)
+
+	y_vec_len = 2*n_x_vals*n_y_vals         # Length fed to/from scipy (flattened version of ^)
 
 	# Why figure out how reshape works, when we can just reshape a [0, 1, 2, ...] vector to our preferred size?
-	# Then, we can index it however we want and the value will be the correct index in the flattened vector
+	# Then, we can index it however we want and the value will be the correct index in the flattened vector!
 	idx_lookup_table = np.arange(y_vec_len).reshape(working_size)
+	# Define a shorthand for indexing this
 	def idx(xv, y, x):
 		return idx_lookup_table[xv,y,x]
 
 	# Think of these as being indexed in the form [to, from] such that
 	# the value at <to> in the source vector will be scaled by mat[to, from]
 	# and placed at <from> in the result vector
-	deriv_mat = np.zeros((y_vec_len, y_vec_len))
-	source_mat = np.zeros((y_vec_len, len(sources)))
+	deriv_mat = np.zeros((y_vec_len, y_vec_len))      # Affects from cells in the grid
+	source_mat = np.zeros((y_vec_len, len(sources)))  # Affects from sources
 
 	source_freqs = np.array([w for _, _, w in sources])
 
+	# Now, populate the matrices for all x,y pairs!
 	for y in tqdm(range(n_y_vals)):
 		for x in range(n_x_vals):
-			# Cache the index of (x, y) for
+			# Cache the index of (x, y) in the scipy vector
 			pos_loc_idx = idx(0, y, x)
 			vel_loc_idx = idx(1, y, x)
 
 			# dx/dt = 1*v
 			deriv_mat[pos_loc_idx, vel_loc_idx] = 1
 
-			# dv/dt is sum of effects from neighbors
+			# dv/dt is sum of effects from neighbors (and sponges)
 			neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
 			for nei_x, nei_y in neighbors:
 				is_source = False
@@ -159,8 +168,8 @@ def fea(mat):
 						deriv_mat[vel_loc_idx, pos_loc_idx] -= k
 						deriv_mat[vel_loc_idx, vel_loc_idx] -= B
 
-				# Don't try to compute neighboring behavior for source points.
-				# That'd just be weird
+				# If this point is a source, it's values are determined completely by the source behavior.
+				# Whatever values the simulation calculates for it must be discarded!
 				if is_source:
 					continue
 
@@ -168,10 +177,10 @@ def fea(mat):
 					if obstacle_geom.contains_raw_point(nei_x, nei_y, x_step, y_step) and \
 							sponge_behavior is None:  # Hard boundary
 						break  # Causes else to be skipped
-				else:  # For-else: If not broken (and, thus, not at a boundary),
+				else:  # For-else: If for loop not broken (and, thus, not at a boundary),
 					# Apply neighboring effects (see source math).
 					# This is the same, but all the data's already in the state vec,
-					# so we can do this just with matrices
+					# so we can do this with just one matrix
 					deriv_mat[vel_loc_idx, idx(0, nei_y, nei_x)] += k
 					deriv_mat[vel_loc_idx, pos_loc_idx] -= k
 					deriv_mat[vel_loc_idx, idx(1, nei_y, nei_x)] += B
@@ -181,26 +190,29 @@ def fea(mat):
 			for (obstacle_geom, sponge_behavior) in obstacles:
 				if obstacle_geom.contains_raw_point(nei_x, nei_y, x_step, y_step) and \
 						sponge_behavior is not None:  # Sponge boundary
-					# This essentially says dv/dt += sponge_behavior * (-v)
+					# dv/dt += sponge_behavior * (-v)
 					deriv_mat[vel_loc_idx, vel_loc_idx] -= sponge_behavior(obstacle_geom, x, y)
 
 	print("Computing efficient representation...")
 
-	# Convert to csr matrix for speedy matrix-vector multiplications
+	# Most of the values in these matrices are 0 because every point is only
+	# influenced by its neighbors (And every point only has a few of those!)
+	# Thus, we can convert these to sparse csr matrices for speedy matrix-vector multiplications
 	deriv_mat = csr_matrix(deriv_mat)
 	source_mat = csr_matrix(source_mat)
 
 	print("Running simulation...")
 
 	# Now that we've computed all that, the actual evolution can be expressed fairly simply
-	# (And done quickly by baked-in numpy routines)
+	# (And done quickly by native numpy routines)
 	def ode_problem(t, v, progress_bar):
+		# Neat trick to get tqdm to show an approximation of how much time we've simulated.
 		progress_bar.update(round(t, 3)-progress_bar.n)
 
-		# Compute driving forces (remember, amplitudes are already stored in source_mat)
+		# Compute driving forces (amplitudes are already stored in source_mat)
 		source_positions = np.sin(source_freqs * t)
 		# Derivative of ^
-		source_velocities = source_freqs * np.cos(source_freqs * t)  # All of this just broadcasts correctly *trust*
+		source_velocities = source_freqs * np.cos(source_freqs * t)  # Here * performs an element-wise product, so this is correct
 
 		# Multiply the right things to make the math discussed above work and then add all the effects together
 		return deriv_mat.dot(v) + source_mat.dot(k * source_positions + B * source_velocities)
@@ -289,7 +301,7 @@ def frame(n):
 	map_data.set_data(data_matrix[n])
 	current_time.set_xdata([n*t_step]*2)
 
-	return (map_data,)
+	return (map_data, current_time)
 
 ani = FuncAnimation(fig, frame, range(len(t_vals)), interval=1000*t_step/animation_speed, blit=False)
 plt.show()
