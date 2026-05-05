@@ -70,6 +70,7 @@ class Rectangle(Geometry):
 		# In the infinitesimal case, we're still off by one element of the step size,
 		# but I can't think of a way around this that's not more trouble than its worth for a (hopefully) small correction
 		# The weird copy-sign stuff is just to support negative dimensions (because why not)
+		# For a fine enough step size, this makes everything work basically as one would expect
 		if use_exact_coordinates:
 			width = math.copysign(abs(width)-1, width)
 			height = math.copysign(abs(height)-1, height)
@@ -118,7 +119,10 @@ class Border(Geometry):
 		If inside_border is True, this second rect will be placed inside the first.
 		Otherwise, it will be placed around it.
 		"""
-		super().__init__(True)  # Let the rectangles handle coordinate conversions
+		# Technically this doesn't matter. We're going to want all coordinate conversions
+		# to be handled by the rectangles, so we'll override the default uses of this flag.
+		# Nevertheless, set it properly in case someone decides to check it later.
+		super().__init__(use_exact_coordinates)
 		self.thickness, self.inside_border = thickness, inside_border
 		# Having an inside rect just means that the secondary distances go in instead of out.
 		# This can be handled by just inverting the thickness param
@@ -142,7 +146,7 @@ class Border(Geometry):
 		return self.outer_rect._contains_point(x, y) and not \
 			self.inner_rect._contains_point(x, y)
 
-	# Because we want the rectangles to handle all coordinate conversions,
+	# We want the rectangles to handle all coordinate conversions.
 	# Override our own contains_raw_point function to never perform conversions
 	def contains_raw_point(self, x, y, x_step, y_step):
 		return self.outer_rect.contains_raw_point(x, y, x_step, y_step) and not \
