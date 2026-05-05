@@ -37,9 +37,25 @@ class Circle(Geometry):
 class Rectangle(Geometry):
 	def __init__(self, x, y, width, height, use_exact_coordinates=False):
 		super().__init__(use_exact_coordinates)
+		# When everything is discretized, distances are one less because the first square has length 1
+		# In the infinitesimal case, we're still off by one element of the step size,
+		# but I can't think of a way around this that's not more trouble than its worth for a (hopefully) small correction
+		# The weird copy-sign stuff is just to support negative dimensions (because why not)
+		if use_exact_coordinates:
+			width = math.copysign(abs(width)-1, width)
+			height = math.copysign(abs(height)-1, height)
+
 		x1, x2, y1, y2 = x, x + width, y, y + height
 		self.x_min, self.x_max = min(x1, x2), max(x1, x2)
 		self.y_min, self.y_max = min(y1, y2), max(y1, y2)
+
+	def dist_to_border(self, x, y):
+		return math.dist(
+			(
+				min(abs(x - self.x_min), abs(x - self.x_max)),
+				min(abs(y - self.y_min), abs(y - self.y_max)),
+			), (0, 0)
+		)
 
 	def contains_point(self, x, y):
 		return self.x_min <= x <= self.x_max and \
@@ -48,7 +64,7 @@ class Rectangle(Geometry):
 class Border(Geometry):
 	def __init__(self, x, y, width, height, thickness, inside_border=True, use_exact_coordinates=False):
 		super().__init__(True)  # Pass coordinate conversions to the rectangles
-		self.inside_border = inside_border
+		self.thickness, self.inside_border = thickness, inside_border
 		if inside_border:
 			thickness *= -1
 		rect1 = Rectangle(x, y, width, height, use_exact_coordinates)
