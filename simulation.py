@@ -3,9 +3,9 @@ from geometry import *
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 import numpy as np
+from odrpack import odr_fit
 from scipy.fft import fft, ifft, fftfreq
 from scipy.integrate import solve_ivp
-from scipy.odr import Model, Data, ODR
 from scipy.sparse import csr_matrix
 from tqdm import tqdm
 
@@ -22,9 +22,7 @@ n_x_vals = 100
 n_y_vals = 100
 
 # Animation Params
-t_vals = np.linspace(0, 120, 100) #step size should be >  seconds
-t_step = abs(t_vals[1] - t_vals[0])
-
+t_vals = np.linspace(0, 120, 500)
 animation_speed = 10
 
 # Wave Params
@@ -50,10 +48,12 @@ x_vals = np.linspace(x_origin, x_origin + sim_width, n_x_vals)
 y_vals = np.linspace(y_origin, y_origin + sim_height, n_y_vals)
 x_step = abs(x_vals[1] - x_vals[0])
 y_step = abs(y_vals[1] - y_vals[0])
+t_step = abs(t_vals[1] - t_vals[0])
 
 # [(Geom, Amplitude, Angular Freq)]
 sources = [
-	(Point(0, 5), A, w)
+	(Point(0, 5), A, w),
+	(Point(0, 3), A, 1.32 * w)
 ]
 
 # [(Geom, (geom,point)->sponge factor or None if hard bound)]
@@ -216,22 +216,23 @@ sensor.plot(t_vals, sensor_data)
 clip_pane_start = 0
 clipped_sensor_data = sensor_data[clip_pane_start:]
 sensor.axvline(t_vals[clip_pane_start])
+current_time = sensor.axvline(0)
 
-def fit_func(p, x):
-	a, b, c, d = p
+def fit_func(x, p):
+	a, b, c, d, e, f = p
 	# return a * np.exp(b * x) * np.sin(c * x + d)
-	return a * np.sin(c * x + d)
+	return a * np.sin(b * x + c) + d * np.sin(e * x + f)
 
-sensor_data_clipped = Data(t_vals[clip_pane_start:], sensor_data[clip_pane_start:])
-odr = ODR(sensor_data_clipped, Model(fit_func), beta0=[1]*4)
-fit = odr.run()
+sensor_data_clipped = (t_vals[clip_pane_start:], sensor_data[clip_pane_start:])
+fit = odr_fit(fit_func, *sensor_data_clipped, [1, 1, 1, 1, 2, 1])
 
-fit.pprint()
+print(fit.beta)
 
-sensor.plot(sensor_data_clipped.x, fit_func(fit.beta, sensor_data_clipped.x))
+sensor.plot(sensor_data_clipped[0], fit_func(sensor_data_clipped[0], fit.beta))
 
 def frame(n):
 	map_data.set_data(data_matrix[n])
+	current_time.set_xdata([n*t_step]*2)
 
 	return (map_data,)
 
