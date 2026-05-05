@@ -52,7 +52,7 @@ t_step = abs(t_vals[1] - t_vals[0])
 
 # [(Geom, Amplitude, Angular Freq)]
 sources = [
-	(Point(2, 5, rtol=0, atol=max(x_step, y_step)), A, w)
+	(Point(2, 5), A, w)
 ]
 
 def sponge_func(dist, max_dist):
