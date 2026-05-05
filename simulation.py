@@ -39,9 +39,9 @@ k = 2  # Spring constant (depending on simulation mode) Increases proportionatly
 B = 0.00005  # Damping constant
 
 # Absorptive Boundary Condition (drag sponge field)
-sponge = False
-sponge_thickness = 10
-gamma_max = 10  # has to be less than 2
+sponge = True
+sponge_thickness = 0.5
+gamma_max = 2  # has to be less than 2
 
 # Precalculate some stuff
 x_vals = np.linspace(x_origin, x_origin + sim_width, n_x_vals)
@@ -52,18 +52,21 @@ t_step = abs(t_vals[1] - t_vals[0])
 
 # [(Geom, Amplitude, Angular Freq)]
 sources = [
-	(Point(0, 5), A, w),
-	(Point(0, 3), A, 1.32 * w)
+	(Point(2, 5, atol=max(x_step, y_step)), A, w)
 ]
 
+def sponge_func(dist, max_dist):
+	return gamma_max * (np.sin((np.pi/2) * (dist/max_dist)) ** 2)
+
 # [(Geom, (geom,point)->sponge factor or None if hard bound)]
+null_obstacle = (Point(-10000, -10000), None)  # Because I'm too lazy to handle this properly
 obstacles = [
 	# There must be a hard border around the simulation or else we'll try to calculate out of bounds points
 	(
 		Border(
 			x_origin, y_origin,
-			sim_width, sim_height,
-			10, False  # Over-sized outside border
+			n_x_vals, n_y_vals,
+			2, False, True  # Over-sized outside border
 		), None
 	),
 	# Conditional sponge
@@ -72,18 +75,24 @@ obstacles = [
 			x_origin, y_origin,
 			sim_width, sim_height,
 			sponge_thickness
-		), (lambda border, x, y: gamma_max) if sponge else None
-	)
+		), lambda border, x, y: sponge_func(
+			border.outer_rect.dist_to_border(x*x_step, y*y_step),
+			border.thickness * np.sqrt(2)  # Because the corners extend a distance of sqrt(2)*<thickness>
+		)
+	) if sponge else null_obstacle
 ]
 
 # Sensor params
 sensor_x_idx = len(x_vals) // 4
 sensor_y_idx = len(y_vals) // 2
 
-# end region
+#endregion
+
+#region Simulation
 
 # Define possible simulators
 def exact_solution(mat):
+	print("Running Simulation...")
 	max_y = max(y_vals)
 	for n, t in enumerate(tqdm(t_vals)):
 		for y_idx, y in enumerate(tqdm(y_vals, leave=False, delay=1)):
@@ -94,6 +103,8 @@ def exact_solution(mat):
 
 
 def fea(mat):
+	print("Preparing Grid...")
+
 	# matrix[0=pos, 1=vel][y][x]
 	working_size = (2, n_y_vals, n_x_vals)  # Size that we actually want use
 	y_vec_len = 2*n_x_vals*n_y_vals         # Length fed to scipy (flattened version of ^)
@@ -108,7 +119,7 @@ def fea(mat):
 
 	source_freqs = np.array([w for _, _, w in sources])
 
-	for y in range(n_y_vals):
+	for y in tqdm(range(n_y_vals)):
 		for x in range(n_x_vals):
 			pos_loc_idx = idx(0, y, x)
 			vel_loc_idx = idx(1, y, x)
@@ -147,9 +158,13 @@ def fea(mat):
 						sponge_behavior is not None:  # Sponge boundary
 					deriv_mat[vel_loc_idx, vel_loc_idx] -= sponge_behavior(obstacle_geom, x, y)
 
+	print("Computing efficient representation...")
+
 	# Convert to csr matrix for speedy matrix-vector multiplications
 	deriv_mat = csr_matrix(deriv_mat)
 	source_mat = csr_matrix(source_mat)
+
+	print("Running simulation...")
 
 	def ode_problem(t, v, progress_bar):
 		progress_bar.update(round(t, 3)-progress_bar.n)
@@ -185,8 +200,6 @@ simulation_func = \
 
 if simulation_func is None:
 	raise ValueError(f"Invalid simulator: {propagation_mode}")
-
-print("Running Simulation...")
 
 data_matrix = np.zeros((len(t_vals), len(y_vals), len(x_vals)))
 simulation_func(data_matrix)
