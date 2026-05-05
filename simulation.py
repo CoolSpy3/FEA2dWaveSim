@@ -1,5 +1,5 @@
-
 #region Imports
+from geometry import *
 from matplotlib.animation import FuncAnimation
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,12 +14,16 @@ from tqdm import tqdm
 #region Params
 
 # Grid Params
-x_vals = np.linspace(0, 10, 100)
-y_vals = np.linspace(0, 10, 100)
+x_origin = 0
+y_origin = 0
+sim_width = 10
+sim_height = 10
+n_x_vals = 100
+n_y_vals = 100
 
 # Animation Params
-t_vals = np.linspace(0, 80, 100) #step size should be >  seconds
-t_step = t_vals[1] - t_vals[0]
+t_vals = np.linspace(0, 120, 100) #step size should be >  seconds
+t_step = abs(t_vals[1] - t_vals[0])
 
 animation_speed = 10
 
@@ -35,55 +39,46 @@ wave_number = 1  # exact mode only
 ## fea mode only
 k = 2  # Spring constant (depending on simulation mode) Increases proportionatly to wavelength
 B = 0.00005  # Damping constant
-sponge = True
+
+# Absorptive Boundary Condition (drag sponge field)
+sponge = False
+sponge_thickness = 10
+gamma_max = 10  # has to be less than 2
 
 # Precalculate some stuff
-n_x_vals = len(x_vals)
-n_y_vals = len(y_vals)
-y_step = y_vals[1] - y_vals[0]
+x_vals = np.linspace(x_origin, x_origin + sim_width, n_x_vals)
+y_vals = np.linspace(y_origin, y_origin + sim_height, n_y_vals)
+x_step = abs(x_vals[1] - x_vals[0])
+y_step = abs(y_vals[1] - y_vals[0])
 
-# Boundary conditions
-driving_range_size = 0.01
-num_driving_points = max(1, driving_range_size // y_step)
-driving_range_min = (n_y_vals - num_driving_points) // 2
-driving_range_max = driving_range_min + num_driving_points
+# [(Geom, Amplitude, Angular Freq)]
+sources = [
+	(Point(0, 5), A, w)
+]
 
-# Absorbative Boundary Condition (drag sponge field)
-sponge_thickness = 10
-gamma_max = 2  # has to be less than 2
-
-# returns the drag coefficient gamma of the ABC sponge
-def apply_sponge(x, y):
-	if not sponge:
-		return 0
-
-	# R = np.sqrt(250)
-	# if (x-50)**2 + (y-50)**2 < R**2:  # circle
-	# 	depth = R - np.sqrt((x-50)**2 + (y-50)**2)
-	# 	return gamma_max * (depth/R) ** 2
-
-	# layer around the edge
-	d_into_sponge = max(0, sponge_thickness-x, sponge_thickness-y, x-n_x_vals+sponge_thickness, y-n_y_vals+sponge_thickness)
-	if d_into_sponge > 0:
-		return gamma_max * (d_into_sponge/sponge_thickness) ** 2
-
-	return 0
+# [(Geom, (geom,point)->sponge factor or None if hard bound)]
+obstacles = [
+	# There must be a hard border around the simulation or else we'll try to calculate out of bounds points
+	(
+		Border(
+			x_origin, y_origin,
+			sim_width, sim_height,
+			10, False  # Over-sized outside border
+		), None
+	),
+	# Conditional sponge
+	(
+		Border(
+			x_origin, y_origin,
+			sim_width, sim_height,
+			sponge_thickness
+		), (lambda border, x, y: gamma_max) if sponge else None
+	)
+]
 
 # Sensor params
 sensor_x_idx = len(x_vals) // 4
 sensor_y_idx = len(y_vals) // 2
-
-def source(x, y):
-	return x < 0 and driving_range_min <= y <= driving_range_max
-	# if 20 < x <= 25 and 20 <= y <= 25:
-	# 	return True
-	# #elif x <= 15 and 75 <= y <= 80:
-	# 	#return True
-
-def outOfBounds(x, y):
-	in_box = 0 <= x < n_x_vals and 0 <= y < n_y_vals
-
-	return not in_box
 
 # end region
 
@@ -109,7 +104,9 @@ def fea(mat):
 
 	# [to, from]
 	deriv_mat = np.zeros((y_vec_len, y_vec_len))
-	drive_vec = np.zeros(y_vec_len)
+	source_mat = np.zeros((y_vec_len, len(sources)))
+
+	source_freqs = np.array([w for _, _, w in sources])
 
 	for y in range(n_y_vals):
 		for x in range(n_x_vals):
@@ -120,30 +117,48 @@ def fea(mat):
 			neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
 
 			for nei_x, nei_y in neighbors:
-				if source(nei_x, nei_y):
-					drive_vec[vel_loc_idx] = 1
-					deriv_mat[vel_loc_idx, pos_loc_idx] -= k
-					deriv_mat[vel_loc_idx, vel_loc_idx] -= B
-				elif not outOfBounds(nei_x, nei_y):
+				is_source = False
+				for source_idx, (source_geom, A, _) in enumerate(sources):
+					if source_geom.contains_raw_point(nei_x, nei_y, x_step, y_step):
+						is_source = True
+						source_mat[vel_loc_idx, source_idx] = A
+						deriv_mat[vel_loc_idx, pos_loc_idx] -= k
+						deriv_mat[vel_loc_idx, vel_loc_idx] -= B
+
+				if is_source:
+					continue
+
+				is_out_of_bounds = False
+				for (obstacle_geom, sponge_behavior) in obstacles:
+					if obstacle_geom.contains_raw_point(nei_x, nei_y, x_step, y_step) and \
+							sponge_behavior is None:  # Hard boundary
+						is_out_of_bounds = True
+						break
+
+				if not is_out_of_bounds:
 					deriv_mat[vel_loc_idx, idx(0, nei_y, nei_x)] += k
 					deriv_mat[vel_loc_idx, pos_loc_idx] -= k
 					deriv_mat[vel_loc_idx, idx(1, nei_y, nei_x)] += B
 					deriv_mat[vel_loc_idx, vel_loc_idx] -= B
 
 			# Drag into the sponge
-			if gamma := apply_sponge(x, y) > 0:
-				deriv_mat[vel_loc_idx, vel_loc_idx] -= gamma
+			for (obstacle_geom, sponge_behavior) in obstacles:
+				if obstacle_geom.contains_raw_point(nei_x, nei_y, x_step, y_step) and \
+						sponge_behavior is not None:  # Sponge boundary
+					deriv_mat[vel_loc_idx, vel_loc_idx] -= sponge_behavior(obstacle_geom, x, y)
 
-	deriv_mat = csr_matrix(deriv_mat)  # Convert to csr matrix for speedy matrix-vector multiplications
+	# Convert to csr matrix for speedy matrix-vector multiplications
+	deriv_mat = csr_matrix(deriv_mat)
+	source_mat = csr_matrix(source_mat)
 
 	def ode_problem(t, v, progress_bar):
 		progress_bar.update(round(t, 3)-progress_bar.n)
 
-		# Compute driving force
-		driving_pos = A * np.sin(w * t)
-		driving_vel = A * w * np.cos(w * t)
+		# Compute driving forces
+		source_positions = np.sin(source_freqs * t)
+		source_velocities = source_freqs * np.cos(source_freqs * t)  # All of this just broadcasts correctly *trust*
 
-		return deriv_mat.dot(v) + (drive_vec * (k * driving_pos + B * driving_vel))
+		return deriv_mat.dot(v) + source_mat.dot(k * source_positions + B * source_velocities)
 
 	with tqdm(total=max(t_vals)) as progress_bar:
 		values = solve_ivp(
@@ -205,7 +220,7 @@ sensor.axvline(t_vals[clip_pane_start])
 def fit_func(p, x):
 	a, b, c, d = p
 	# return a * np.exp(b * x) * np.sin(c * x + d)
-	return np.sin(c * x + d)
+	return a * np.sin(c * x + d)
 
 sensor_data_clipped = Data(t_vals[clip_pane_start:], sensor_data[clip_pane_start:])
 odr = ODR(sensor_data_clipped, Model(fit_func), beta0=[1]*4)
