@@ -69,7 +69,7 @@ obstacles = [
 	# There must be a hard border around the simulation or else it'll try to calculate out of bounds points
 	(
 		Border(
-			# Set it to be all the points just outside of the valid grid space, minus
+			# Set it to be all the points just outside of the valid grid space
 			x_origin, y_origin,
 			n_x_vals, n_y_vals,
 			# thickness = 2 to give another cell of extra padding just-in-case
