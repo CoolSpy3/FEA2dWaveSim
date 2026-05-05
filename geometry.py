@@ -59,7 +59,7 @@ class Rectangle(Geometry):
 			return min(h_dist, v_dist)
 		else:
 			closest_point = (
-				self.x_min if x < self.x_min else self.x_max if x > self.x_max else x
+				self.x_min if x < self.x_min else self.x_max if x > self.x_max else x,
 				self.y_min if y < self.y_min else self.y_max if y > self.y_max else y
 			)
 			return math.dist(p, closest_point)

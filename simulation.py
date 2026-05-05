@@ -40,8 +40,8 @@ B = 0  # Damping constant (removed in latest model iteration)
 
 # Absorptive Boundary Condition (drag sponge field)
 sponge = True
-sponge_thickness = 0.5
-gamma_max = 2  # has to be less than 2
+sponge_thickness = 1.5 # VERY IMPORTANT. This needs to be uncomfrotably large unfortunatly. It needs to be larger for larger wavelengths
+gamma_max = 2  # Experiment with
 
 # Precalculate some stuff
 x_vals = np.linspace(x_origin, x_origin + sim_width, n_x_vals)
@@ -55,8 +55,17 @@ sources = [
 	(Point(2, 5, rtol=0, atol=max(x_step, y_step)), A, w)
 ]
 
-def sponge_func(dist, max_dist):
-	return gamma_max * (np.sin((np.pi/2) * (dist/max_dist)) ** 2)
+def sponge_func(border, x, y):
+	# Max distance into sponge in one direction
+	d_into_sponge = border.thickness - min(
+		abs(x - border.outer_rect.x_min), abs(x - border.outer_rect.x_max),
+		abs(y - border.outer_rect.y_min), abs(y - border.outer_rect.y_max)
+		) 
+
+	if 0 < d_into_sponge < border.thickness:
+		return gamma_max * np.sin(np.pi/2 * d_into_sponge/border.thickness) ** 3
+	else:
+		return 0
 
 # [(Geom, (geom,point)->sponge factor or None if hard bound)]
 obstacles = [
@@ -74,10 +83,7 @@ obstacles = [
 			x_origin, y_origin,
 			sim_width, sim_height,
 			sponge_thickness
-		), lambda border, x, y: sponge_func(
-			border.outer_rect.dist_to_border(x*x_step, y*y_step),
-			border.thickness * np.sqrt(2)  # Because the corners extend a distance of sqrt(2)*<thickness>
-		)
+		), lambda border, x, y: sponge_func(border, x * x_step, y * y_step)
 	) if sponge else None
 ]
 
