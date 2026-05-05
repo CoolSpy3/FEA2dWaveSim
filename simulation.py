@@ -8,6 +8,7 @@ from scipy.fft import fft, ifft, fftfreq
 from scipy.integrate import solve_ivp
 from scipy.sparse import csr_matrix
 from tqdm import tqdm
+from typing import cast
 
 #endregion
 
@@ -64,7 +65,7 @@ sources = [
 ]
 
 def sponge_func(dist, max_dist):
-	return gamma_max * (max(0, np.cos((np.pi/2) * (dist/max_dist))) ** 3)	
+	return gamma_max * (max(0, np.cos((np.pi/2) * (dist/max_dist))) ** 3)
 
 
 # Format: [(Geom, < (geom,point)->sponge_factor > or < None > if hard boundary)]
@@ -122,6 +123,15 @@ def exact_solution(mat):
 				# Doesn't really matter, this is just for a rough comparison
 				mat[n][y_idx][x_idx] = A*np.sin(wave_number*r - w*t) / (np.sqrt(r) or 1)
 
+def is_boundary(x, y, hard):
+	sponges = []
+	for (obstacle_geom, sponge_behavior) in obstacles:
+			if obstacle_geom.contains_raw_point(x, y, x_step, y_step):
+				if hard and sponge_behavior is None:
+					return True
+				elif not hard and sponge_behavior is not None:
+					sponges.append((obstacle_geom, sponge_behavior))
+	return False if hard else sponges
 
 def fea(mat):
 	print("Preparing Grid...")
@@ -149,58 +159,42 @@ def fea(mat):
 	# Now, populate the matrices for all x,y pairs!
 	for y in tqdm(range(n_y_vals)):
 		for x in range(n_x_vals):
-			for (obstacle_geom, sponge_behavior) in obstacles:
-					if obstacle_geom.contains_raw_point(x, y, x_step, y_step) and \
-							sponge_behavior is None:  # Hard boundary
-						break  # Causes else to be skipped
-			else:
+			if is_boundary(x, y, True):
+				continue
 
-				# Cache the index of (x, y) in the scipy vector
-				pos_loc_idx = idx(0, y, x)
-				vel_loc_idx = idx(1, y, x)
+			# Cache the index of (x, y) in the scipy vector
+			pos_loc_idx = idx(0, y, x)
+			vel_loc_idx = idx(1, y, x)
 
-				# dx/dt = 1*v
-				deriv_mat[pos_loc_idx, vel_loc_idx] = 1
+			# dx/dt = 1*v
+			deriv_mat[pos_loc_idx, vel_loc_idx] = 1
 
-				# dv/dt is sum of effects from neighbors (and sponges)
-				neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
-				for nei_x, nei_y in neighbors:
-					is_source = False
-					for source_idx, (source_geom, A, _) in enumerate(sources):
-						if source_geom.contains_raw_point(nei_x, nei_y, x_step, y_step):
-							is_source = True
-							# Include source <source_idx> with amplitude A
-							# Will be scaled by (k * source_pos + B * source_vel)
-							source_mat[vel_loc_idx, source_idx] = A
-							# Subtract k * pos + B * vel so that the overall algebra becomes
-							# k * (source_pos - pos) + B * (source_vel - vel)
-							deriv_mat[vel_loc_idx, pos_loc_idx] -= k
-							deriv_mat[vel_loc_idx, vel_loc_idx] -= B
-
-					# If this point is a source, it's values are determined completely by the source behavior.
-					# Whatever values the simulation calculates for it must be discarded!
-					#if is_source:
-						#continue
-
-					for (obstacle_geom, sponge_behavior) in obstacles:
-						if obstacle_geom.contains_raw_point(nei_x, nei_y, x_step, y_step) and \
-								sponge_behavior is None:  # Hard boundary
-							break  # Causes else to be skipped
-					else:  # For-else: If for loop not broken (and, thus, not at a boundary),
-						# Apply neighboring effects (see source math).
-						# This is the same, but all the data's already in the state vec,
-						# so we can do this with just one matrix
-						deriv_mat[vel_loc_idx, idx(0, nei_y, nei_x)] += k
+			# dv/dt is sum of effects from neighbors (and sponges)
+			neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
+			for nei_x, nei_y in neighbors:
+				for source_idx, (source_geom, A, _) in enumerate(sources):
+					if source_geom.contains_raw_point(nei_x, nei_y, x_step, y_step):
+						# Include source <source_idx> with amplitude A
+						# Will be scaled by (k * source_pos + B * source_vel)
+						source_mat[vel_loc_idx, source_idx] = A
+						# Subtract k * pos + B * vel so that the overall algebra becomes
+						# k * (source_pos - pos) + B * (source_vel - vel)
 						deriv_mat[vel_loc_idx, pos_loc_idx] -= k
-						deriv_mat[vel_loc_idx, idx(1, nei_y, nei_x)] += B
 						deriv_mat[vel_loc_idx, vel_loc_idx] -= B
 
-				# Sponges create drag at a point, regardless of neighboring behavior
-				for (obstacle_geom, sponge_behavior) in obstacles:
-					if obstacle_geom.contains_raw_point(nei_x, nei_y, x_step, y_step) and \
-							sponge_behavior is not None:  # Sponge boundary
-						# dv/dt += sponge_behavior * (-v)
-						deriv_mat[vel_loc_idx, vel_loc_idx] -= sponge_behavior(obstacle_geom, x, y)
+				if not is_boundary(nei_x, nei_y, True):  # Ignore hard boundaries
+					# Apply neighboring effects (see source math).
+					# This is the same, but all the data's already in the state vec,
+					# so we can do this with just one matrix
+					deriv_mat[vel_loc_idx, idx(0, nei_y, nei_x)] += k
+					deriv_mat[vel_loc_idx, pos_loc_idx] -= k
+					deriv_mat[vel_loc_idx, idx(1, nei_y, nei_x)] += B
+					deriv_mat[vel_loc_idx, vel_loc_idx] -= B
+
+			# Sponges create drag at a point, regardless of neighboring behavior
+			for obstacle_geom, sponge_behavior in cast(list, is_boundary(x, y, False)):
+				# dv/dt += sponge_behavior * (-v)
+				deriv_mat[vel_loc_idx, vel_loc_idx] -= sponge_behavior(obstacle_geom, x, y)
 
 	print("Computing efficient representation...")
 
