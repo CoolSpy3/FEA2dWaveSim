@@ -59,9 +59,9 @@ sensor_y_idx = int(sensor_pos[1] // y_step)
 
 # Place stuff on the grid!
 
-# Format: [(Geom, Amplitude, Angular Freq)]
+# Format: [(Geom, Amplitude, Angular Freq, (start_time, end_time) or None)]
 sources = [
-	(Point(2, 5), A, w)
+	(Point(2, 5), A, w, (0, 1))
 ]
 
 def sponge_func(dist, max_dist):
@@ -154,7 +154,7 @@ def fea(mat):
 	deriv_mat = np.zeros((y_vec_len, y_vec_len))      # Affects from cells in the grid
 	source_mat = np.zeros((y_vec_len, len(sources)))  # Affects from sources
 
-	source_freqs = np.array([w for _, _, w in sources])
+	source_freqs = np.array([w for _, _, w, _ in sources])
 
 	# Now, populate the matrices for all x,y pairs!
 	for y in tqdm(range(n_y_vals)):
@@ -172,7 +172,7 @@ def fea(mat):
 			# dv/dt is sum of effects from neighbors (and sponges)
 			neighbors = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
 			for nei_x, nei_y in neighbors:
-				for source_idx, (source_geom, A, _) in enumerate(sources):
+				for source_idx, (source_geom, A, _, _) in enumerate(sources):
 					if source_geom.contains_raw_point(nei_x, nei_y, x_step, y_step):
 						# Include source <source_idx> with amplitude A
 						# Will be scaled by (k * source_pos + B * source_vel)
@@ -213,12 +213,19 @@ def fea(mat):
 		progress_bar.update(round(t, 3)-progress_bar.n)
 
 		# Compute driving forces (amplitudes are already stored in source_mat)
-		source_positions = np.sin(source_freqs * t) if t < 0.05 else source_freqs * 0
+		source_positions = np.sin(source_freqs * t)
 		# Derivative of ^
-		source_velocities = source_freqs * np.cos(source_freqs * t) if t < 0.05 else source_freqs * 0  # Here * performs an element-wise product, so this is correct
+		source_velocities = source_freqs * np.cos(source_freqs * t)  # Here * performs an element-wise product, so this is correct
+
+		active_sources = [
+			1 if
+				not time_range or time_range[0] <= t <= time_range[1]
+			else 0
+			for _, _, _, time_range in sources
+		]
 
 		# Multiply the right things to make the math discussed above work and then add all the effects together
-		return deriv_mat.dot(v) + source_mat.dot(k * source_positions + B * source_velocities)
+		return deriv_mat.dot(v) + source_mat.dot(k * source_positions + B * source_velocities) * active_sources
 
 	# Alright, we're all set!
 	# I henceforth call unto the deep magic!
