@@ -50,12 +50,19 @@ class Rectangle(Geometry):
 		self.y_min, self.y_max = min(y1, y2), max(y1, y2)
 
 	def dist_to_border(self, x, y):
-		return math.dist(
-			(
-				min(abs(x - self.x_min), abs(x - self.x_max)),
-				min(abs(y - self.y_min), abs(y - self.y_max)),
-			), (0, 0)
-		)
+		p = x, y
+		if self.contains_point(x, y):
+			is_left = x < (self.x_max + self.x_min) / 2
+			is_down = y < (self.y_max + self.y_min) / 2
+			h_dist = abs(x - (self.x_min if is_left else self.x_max))
+			v_dist = abs(y - (self.y_min if is_down else self.y_max))
+			return min(h_dist, v_dist)
+		else:
+			closest_point = (
+				self.x_min if x < self.x_min else self.x_max if x > self.x_max else x
+				self.y_min if y < self.y_min else self.y_max if y > self.y_max else y
+			)
+			return math.dist(p, closest_point)
 
 	def contains_point(self, x, y):
 		return self.x_min <= x <= self.x_max and \
