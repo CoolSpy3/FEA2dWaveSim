@@ -62,7 +62,7 @@ sensor_y_idx = int(sensor_pos[1] // y_step)
 # Format: [(Geom, Amplitude, Angular Freq, (start_time, end_time) or None)]
 sources = [
 	#(Rectangle(1.5, 3.5, 0.1, 0.25), A, w, (0,5)),
-	(Rectangle(1, 4.65, 0.1, 0.7), A, w, None)
+	(Rectangle(1, 4.65, 0.1, 2), A, w, None)
 	#(Circle(5, 5, 0.3), A, w, (0, 50))
 ]
 
