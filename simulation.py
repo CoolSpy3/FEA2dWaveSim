@@ -23,11 +23,11 @@ n_x_vals = 100
 n_y_vals = 100
 
 # Animation Params
-t_vals = np.linspace(0, 100, 400)
+t_vals = np.linspace(0, 150, 500)
 animation_speed = 40
 
 # Wave Params
-w = 1    # Driving angular frequency
+w = 2    # Driving angular frequency
 A = 20   # Driving amplitude
 
 propagation_mode = "fea"  # Valid options: "exact", "fea"
@@ -61,8 +61,8 @@ sensor_y_idx = int(sensor_pos[1] // y_step)
 
 # Format: [(Geom, Amplitude, Angular Freq, (start_time, end_time) or None)]
 sources = [
-	(Rectangle(1.5, 3.5, 0.1, 0.25), A, w, None),
-	(Rectangle(1.5, 6.5, 0.1, 0.25), A, w, None)
+	#(Rectangle(1.5, 3.5, 0.1, 0.25), A, w, (0,5)),
+	(Rectangle(1, 4.65, 0.1, 0.7), A, w, None)
 	#(Circle(5, 5, 0.3), A, w, (0, 50))
 ]
 
@@ -96,11 +96,14 @@ obstacles = [
 		)
 	) if sponge else None,
 	# Circle
-	(
-		Rectangle (
-			8, 2, 0.2, 7
-		), None
-	)
+	# (
+	# 	Rectangle (
+	# 		8, 2, 2, 7
+	# 	), lambda border, x, y: sponge_func(
+	# 		border.dist_to_border(x*x_step, y*y_step),
+	# 		2
+	# 	)
+	# )
 ]
 
 # Allows us to use None as a null-obstacle.
@@ -316,7 +319,7 @@ def frame(n):
 	return (map_data,)
 
 ani = FuncAnimation(fig, frame, range(len(t_vals)), interval=1000*t_step/animation_speed, blit=False)
-ani.save("doubleslit.gif", fps=48, dpi=100)
-#plt.show()
+#ani.save("doubleslit.gif", fps=48, dpi=100)
+plt.show()
 
 #endregion
