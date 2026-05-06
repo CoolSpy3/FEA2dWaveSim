@@ -23,21 +23,21 @@ n_x_vals = 100
 n_y_vals = 100
 
 # Animation Params
-t_vals = np.linspace(0, 150, 500)
-animation_speed = 40
+t_vals = np.linspace(0, 100, 200)
+animation_speed = 20
 
 # Wave Params
-w = 2    # Driving angular frequency
-A = 20   # Driving amplitude
+w = 0.5    # Driving angular frequency
+A = 100   # Driving amplitude
 
 propagation_mode = "fea"  # Valid options: "exact", "fea"
 
 ## exact mode only
-wave_number = 1
+wave_number = 6
 
 ## fea mode only
-k = 2  # Spring constant (Increases proportionally to wavelength)
-B = 0.005  # Damping constant (removed in latest model iteration)
+k = 6/(8)  # Spring constant (Increases proportionally to wavelength)
+B = 0.0005  # Damping constant (removed in latest model iteration)
 
 # Absorptive Boundary Condition (drag sponge field)
 sponge = True
@@ -52,7 +52,7 @@ y_step = abs(y_vals[1] - y_vals[0])
 t_step = abs(t_vals[1] - t_vals[0])
 
 # Sensor params
-sensor_pos = 2.3, 5
+sensor_pos = 2, 7
 
 sensor_x_idx = int(sensor_pos[0] // x_step)
 sensor_y_idx = int(sensor_pos[1] // y_step)
@@ -62,8 +62,9 @@ sensor_y_idx = int(sensor_pos[1] // y_step)
 # Format: [(Geom, Amplitude, Angular Freq, (start_time, end_time) or None)]
 sources = [
 	#(Rectangle(1.5, 3.5, 0.1, 0.25), A, w, (0,5)),
-	(Rectangle(1, 4.65, 0.1, 2), A, w, None)
-	#(Circle(5, 5, 0.3), A, w, (0, 50))
+	#(Rectangle(1, 4.65, 0.1, 2), A, w, None)
+	#(Circle(2, 5, 0.3), A, w, None)
+	(Point(5,5), A, w, (0, 10))
 ]
 
 def sponge_func(dist, max_dist):
@@ -95,15 +96,12 @@ obstacles = [
 			border.thickness
 		)
 	) if sponge else None,
-	# Circle
-	# (
-	# 	Rectangle (
-	# 		8, 2, 2, 7
-	# 	), lambda border, x, y: sponge_func(
-	# 		border.dist_to_border(x*x_step, y*y_step),
-	# 		2
-	# 	)
-	# )
+	#Circle
+	(
+		Circle (
+			7, 4, 1
+		), None
+	)
 ]
 
 # Allows us to use None as a null-obstacle.
@@ -123,7 +121,7 @@ def exact_solution(mat):
 	for n, t in enumerate(tqdm(t_vals)):
 		for y_idx, y in enumerate(tqdm(y_vals, leave=False, delay=1)):
 			for x_idx, x in enumerate(x_vals):
-				r = np.sqrt(x**2 + (y - (max_y / 2))**2)
+				r = np.sqrt((x-2)**2 + (y - (max_y / 2))**2)
 				# Should this have a 1/sqrt(k) or something similar?
 				# Doesn't really matter, this is just for a rough comparison
 				mat[n][y_idx][x_idx] = A*np.sin(wave_number*r - w*t) / (np.sqrt(r) or 1)
@@ -277,9 +275,12 @@ print(f"Done! Computed amplitudes fall in the range [{np.min(data_matrix)}, {np.
 
 # Display the results!
 
-fig, (wave_sim) = plt.subplots(1)
+fig, (wave_sim, sensor) = plt.subplots(2)
 wave_sim.set_xlim(min(x_vals), max(x_vals))
 wave_sim.set_ylim(min(y_vals), max(y_vals))
+wave_sim.set_xlabel('x')
+wave_sim.set_ylabel('y')
+
 
 map_data = wave_sim.imshow(
 	np.zeros((len(y_vals), len(x_vals))),
@@ -289,14 +290,17 @@ map_data = wave_sim.imshow(
 
 # WIP Sensor code. TODO: Document
 
-# sensor_data = data_matrix[:,sensor_y_idx,sensor_x_idx]
-# sensor.plot(t_vals, sensor_data)
+sensor_data = data_matrix[:,sensor_y_idx,sensor_x_idx]
+sensor.plot(t_vals, sensor_data)
+sensor.set_xlabel("Time")
+sensor.set_ylabel("Sensor Amplitude")
 
-# # clip_pane_start = [v > A/11 for v in sensor_data].index(True)
-# clip_pane_start = 0
-# clipped_sensor_data = sensor_data[clip_pane_start:]
+
+# clip_pane_start = [v > A/11 for v in sensor_data].index(True)
+clip_pane_start = 0
+clipped_sensor_data = sensor_data[clip_pane_start:]
 # sensor.axvline(t_vals[clip_pane_start])
-# current_time = sensor.axvline(0)
+current_time = sensor.axvline(0)
 
 # def fit_func(x, p):
 # 	a, b, c, d, e, f = p
@@ -314,12 +318,13 @@ map_data = wave_sim.imshow(
 
 def frame(n):
 	map_data.set_data(data_matrix[n])
-	# current_time.set_xdata([n*t_step]*2)
+	current_time.set_xdata([n*t_step]*2)
 
-	return (map_data,)
+	return (map_data, sensor)
+fig.tight_layout()
 
 ani = FuncAnimation(fig, frame, range(len(t_vals)), interval=1000*t_step/animation_speed, blit=False)
-#ani.save("doubleslit.gif", fps=48, dpi=100)
+ani.save("Ping.gif", fps=32, dpi=200)
 plt.show()
 
 #endregion
