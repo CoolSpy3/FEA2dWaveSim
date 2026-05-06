@@ -23,8 +23,8 @@ n_x_vals = 100
 n_y_vals = 100
 
 # Animation Params
-t_vals = np.linspace(0, 60, 300)
-animation_speed = 20
+t_vals = np.linspace(0, 100, 400)
+animation_speed = 40
 
 # Wave Params
 w = 1    # Driving angular frequency
@@ -37,7 +37,7 @@ wave_number = 1
 
 ## fea mode only
 k = 2  # Spring constant (Increases proportionally to wavelength)
-B = 0.05  # Damping constant (removed in latest model iteration)
+B = 0.005  # Damping constant (removed in latest model iteration)
 
 # Absorptive Boundary Condition (drag sponge field)
 sponge = True
@@ -61,7 +61,9 @@ sensor_y_idx = int(sensor_pos[1] // y_step)
 
 # Format: [(Geom, Amplitude, Angular Freq, (start_time, end_time) or None)]
 sources = [
-	(Point(2, 5), A, w, (0, 1))
+	(Rectangle(1.5, 3.5, 0.1, 0.25), A, w, None),
+	(Rectangle(1.5, 6.5, 0.1, 0.25), A, w, None)
+	#(Circle(5, 5, 0.3), A, w, (0, 50))
 ]
 
 def sponge_func(dist, max_dist):
@@ -95,8 +97,8 @@ obstacles = [
 	) if sponge else None,
 	# Circle
 	(
-		Circle (
-			7, 5, 2
+		Rectangle (
+			8, 2, 0.2, 7
 		), None
 	)
 ]
@@ -179,8 +181,8 @@ def fea(mat):
 						source_mat[vel_loc_idx, source_idx] = A
 						# Subtract k * pos + B * vel so that the overall algebra becomes
 						# k * (source_pos - pos) + B * (source_vel - vel)
-						deriv_mat[vel_loc_idx, pos_loc_idx] -= k
-						deriv_mat[vel_loc_idx, vel_loc_idx] -= B
+						#deriv_mat[vel_loc_idx, pos_loc_idx] -= k
+						#deriv_mat[vel_loc_idx, vel_loc_idx] -= B
 
 				if not is_boundary(nei_x, nei_y, True):  # Ignore hard boundaries
 					# Apply neighboring effects (see source math).
@@ -225,7 +227,7 @@ def fea(mat):
 		]
 
 		# Multiply the right things to make the math discussed above work and then add all the effects together
-		return deriv_mat.dot(v) + source_mat.dot(k * source_positions + B * source_velocities) * active_sources
+		return deriv_mat.dot(v) + source_mat.dot((k * source_positions + B * source_velocities) * active_sources)
 
 	# Alright, we're all set!
 	# I henceforth call unto the deep magic!
@@ -272,7 +274,7 @@ print(f"Done! Computed amplitudes fall in the range [{np.min(data_matrix)}, {np.
 
 # Display the results!
 
-fig, (wave_sim, sensor) = plt.subplots(2)
+fig, (wave_sim) = plt.subplots(1)
 wave_sim.set_xlim(min(x_vals), max(x_vals))
 wave_sim.set_ylim(min(y_vals), max(y_vals))
 
@@ -284,24 +286,24 @@ map_data = wave_sim.imshow(
 
 # WIP Sensor code. TODO: Document
 
-sensor_data = data_matrix[:,sensor_y_idx,sensor_x_idx]
-sensor.plot(t_vals, sensor_data)
+# sensor_data = data_matrix[:,sensor_y_idx,sensor_x_idx]
+# sensor.plot(t_vals, sensor_data)
 
-# clip_pane_start = [v > A/11 for v in sensor_data].index(True)
-clip_pane_start = 0
-clipped_sensor_data = sensor_data[clip_pane_start:]
-sensor.axvline(t_vals[clip_pane_start])
-current_time = sensor.axvline(0)
+# # clip_pane_start = [v > A/11 for v in sensor_data].index(True)
+# clip_pane_start = 0
+# clipped_sensor_data = sensor_data[clip_pane_start:]
+# sensor.axvline(t_vals[clip_pane_start])
+# current_time = sensor.axvline(0)
 
-def fit_func(x, p):
-	a, b, c, d, e, f = p
-	# return a * np.exp(b * x) * np.sin(c * x + d)
-	return a * np.sin(b * x + c)
+# def fit_func(x, p):
+# 	a, b, c, d, e, f = p
+# 	# return a * np.exp(b * x) * np.sin(c * x + d)
+# 	return a * np.sin(b * x + c)
 
-sensor_data_clipped = (t_vals[clip_pane_start:], sensor_data[clip_pane_start:])
-fit = odr_fit(fit_func, *sensor_data_clipped, [1, 1, 1, 1, 2, 1])
+# sensor_data_clipped = (t_vals[clip_pane_start:], sensor_data[clip_pane_start:])
+# fit = odr_fit(fit_func, *sensor_data_clipped, [1, 1, 1, 1, 2, 1])
 
-print(fit.beta)
+# print(fit.beta)
 
 # sensor.plot(sensor_data_clipped[0], fit_func(sensor_data_clipped[0], fit.beta))
 
@@ -309,11 +311,12 @@ print(fit.beta)
 
 def frame(n):
 	map_data.set_data(data_matrix[n])
-	current_time.set_xdata([n*t_step]*2)
+	# current_time.set_xdata([n*t_step]*2)
 
-	return (map_data, current_time)
+	return (map_data,)
 
 ani = FuncAnimation(fig, frame, range(len(t_vals)), interval=1000*t_step/animation_speed, blit=False)
-plt.show()
+ani.save("doubleslit.gif", fps=48, dpi=100)
+#plt.show()
 
 #endregion
