@@ -41,7 +41,7 @@ B = 0.0005  # Damping constant (removed in latest model iteration)
 
 # Absorptive Boundary Condition (drag sponge field)
 sponge = True
-sponge_thickness = 1.5 # VERY IMPORTANT. This needs to be uncomfrotably large unfortunatly. It needs to be larger for larger wavelengths
+sponge_thickness = 1.5 # VERY IMPORTANT. This needs to be uncomfrotably large unfortunatly. It needs to more than one wavelength
 gamma_max = 2  # Experiment with
 
 # Precalculate some stuff
