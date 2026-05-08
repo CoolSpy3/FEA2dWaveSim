@@ -288,8 +288,7 @@ map_data = wave_sim.imshow(
 	extent=(min(x_vals), max(x_vals), min(y_vals), max(y_vals))
 )
 
-# WIP Sensor code. TODO: Document
-
+# WIP Sensor code. Copy in the data from the large data matrix at the sensor point
 sensor_data = data_matrix[:,sensor_y_idx,sensor_x_idx]
 sensor.plot(t_vals, sensor_data)
 sensor.set_xlabel("Time")
