@@ -275,13 +275,15 @@ print(f"Done! Computed amplitudes fall in the range [{np.min(data_matrix)}, {np.
 
 # Display the results!
 
-fig, (wave_sim, sensor) = plt.subplots(2)
+fig, (wave_sim, sensor) = plt.subplots(2)  # two plots: the wave simulation and the sensor data
+
+# Set up the wave simulation chart
 wave_sim.set_xlim(min(x_vals), max(x_vals))
 wave_sim.set_ylim(min(y_vals), max(y_vals))
 wave_sim.set_xlabel('x')
 wave_sim.set_ylabel('y')
 
-
+# Initialize the 2D array normalized to the max and min of the data 
 map_data = wave_sim.imshow(
 	np.zeros((len(y_vals), len(x_vals))),
 	vmin=np.min(data_matrix), vmax=np.max(data_matrix),
@@ -301,6 +303,7 @@ clipped_sensor_data = sensor_data[clip_pane_start:]
 # sensor.axvline(t_vals[clip_pane_start])
 current_time = sensor.axvline(0)
 
+# Defunct sine fit
 # def fit_func(x, p):
 # 	a, b, c, d, e, f = p
 # 	# return a * np.exp(b * x) * np.sin(c * x + d)
