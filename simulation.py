@@ -143,11 +143,11 @@ def is_boundary(x, y, hard):
 	"""
 	sponges = []
 	for (obstacle_geom, sponge_behavior) in obstacles:
-			if obstacle_geom.contains_raw_point(x, y, x_step, y_step):
-				if hard and sponge_behavior is None:
-					return True
-				elif not hard and sponge_behavior is not None:
-					sponges.append((obstacle_geom, sponge_behavior))
+		if obstacle_geom.contains_raw_point(x, y, x_step, y_step):
+			if hard and sponge_behavior is None:
+				return True
+			elif not hard and sponge_behavior is not None:
+				sponges.append((obstacle_geom, sponge_behavior))
 	return False if hard else sponges
 
 def fea(mat):
