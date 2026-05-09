@@ -34,7 +34,7 @@ propagation_mode = "fea"  # Valid options: "exact", "fea"
 wave_number = 6
 
 ## fea mode only
-k = 6/8  # Spring constant (Increases proportionally to wavelength)
+k = 6/8     # Spring constant (Increases proportionally to wavelength)
 B = 0.0005  # Damping constant (required effect is small, but should be non-zero for stability)
 
 # Absorptive Boundary Condition (drag sponge field)
